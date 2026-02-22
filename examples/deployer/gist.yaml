@@ -1,0 +1,52 @@
+project: deployer
+version: 0.1.0
+description: CLI tool for deploying containerized apps to AWS
+
+runtime:
+  language: Rust
+  version: "1.78"
+  package_manager: cargo
+
+testing:
+  framework: cargo test
+  coverage: true
+
+# CLI kit sections
+cli:
+  binary_name: deployer
+  version_flag: true
+  help_flag: true
+  shell_completions: [bash, zsh, fish]
+
+config:
+  format: toml
+  path: ~/.deployer/config.toml
+  env_prefix: DEPLOYER
+
+# IaC kit sections
+iac:
+  tool: terraform
+  output_dir: .deployer/tf
+
+providers:
+  aws:
+    region_env: AWS_REGION
+    profile_env: AWS_PROFILE
+
+env:
+  AWS_REGION:
+    type: string
+    default: us-east-1
+  AWS_PROFILE:
+    type: string
+  DOCKER_REGISTRY:
+    type: string
+    required: true
+  DEPLOYER_LOG_LEVEL:
+    type: string
+    default: info
+    values: [debug, info, warn, error]
+
+conventions:
+  id_format: ulid
+  timestamps: ISO-8601-UTC

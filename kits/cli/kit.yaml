@@ -1,0 +1,82 @@
+kit: cli
+version: 1.0.0
+author: gist-core
+description: Command-line application constructs — commands, args, flags, prompts, and output formatting
+license: MIT
+
+yaml_sections:
+  cli:
+    description: CLI application settings
+    fields:
+      name: { type: string, required: true }
+      version_from: { type: string }
+      description: { type: string }
+      binary_name: { type: string }
+      shell_completions: { type: boolean, default: true }
+  config:
+    description: Configuration file settings
+    fields:
+      format: { type: string, values: [toml, yaml, json, ini] }
+      path: { type: string }
+      env_prefix: { type: string }
+
+keywords:
+  - command
+  - arg
+  - flag
+  - prompt
+  - output
+
+extends:
+  - fn           # pure transforms for data formatting
+  - rules        # lookup tables for defaults, help text
+  - code         # complex arg parsing, validation logic
+  - always       # global constraints (e.g., mutually exclusive flags)
+
+constructs:
+  command:
+    kind: declaration
+    name_style: identifier
+    doc: A CLI command or subcommand with args, flags, and behavior
+    fields:
+      alias: { type: literal, doc: Short alias for the command }
+      hidden: { type: boolean, doc: Hide from help output }
+    children: [command, arg, flag]
+    supports: [must, context_line, code]
+    snippet: |
+      command ${1:name}
+        > ${2:description}
+        ${0}
+  arg:
+    kind: declaration
+    name_style: identifier
+    doc: Positional argument for a command
+    fields:
+      type: { type: identifier, completions: [string, int, float, path, file, dir, url] }
+      required: { type: boolean }
+      default: { type: literal }
+      validate: { type: prose }
+    snippet: |
+      arg ${1:name}: ${2:string}
+  flag:
+    kind: declaration
+    name_style: identifier
+    doc: Named flag (--flag or -f) for a command
+    fields:
+      short: { type: literal, doc: Single-character alias (-v, -f) }
+      type: { type: identifier, completions: [bool, string, int, float, path, count] }
+      default: { type: literal }
+      env: { type: literal, doc: Environment variable fallback }
+      values: { type: list, doc: Allowed values for autocomplete/validation }
+      global: { type: boolean, doc: Available to all subcommands }
+    snippet: |
+      flag ${1:name}: ${2:string}
+        short: ${3:-n}
+  prompt:
+    kind: inline
+    name_style: none
+    doc: Interactive user prompt (text, confirm, select, multiselect, password)
+  output:
+    kind: inline
+    name_style: none
+    doc: Structured output (table, json, plain, progress bar, spinner)

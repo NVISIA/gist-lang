@@ -1,0 +1,94 @@
+project bookmarks
+  > Personal bookmark manager. Save URLs, tag them, search later.
+  stack: gist.yaml
+
+  always:
+    URLs must be valid (http or https)
+    tags are lowercase and trimmed
+
+// ─── Models ────────────────────────────────────────────
+
+Tag = { id: string, generated, cuid; name: string, unique }
+
+Bookmark = {
+  id: string, generated, cuid
+  url: string
+  title: string
+  description?: string
+  tags: -> Tag[]
+  created_at: datetime, generated
+  updated_at: datetime, generated
+}
+
+// ─── Module ────────────────────────────────────────────
+
+module bookmarks
+
+  to create(url: string, title: string, description?: string, tags?: string[])
+    -> Bookmark | ValidationFailed
+    route: POST /bookmarks
+    saves: Bookmark, Tag
+    do:
+      validate URL format
+      create or find each tag by name
+      create bookmark with tags
+    must: url starts with "http://" or "https://"
+    eg: create("https://example.com", "Example", tags: ["reference"])
+      => { id: "clx...", url: "https://example.com", title: "Example", tags: [{ name: "reference" }] }
+
+  to list(tag?: string, q?: string) -> Bookmark[]
+    route: GET /bookmarks
+    public
+    do:
+      if tag provided: filter bookmarks by tag name
+      if q provided: search title and description
+      order by created_at descending
+
+  to get(id: string) -> Bookmark | NotFound
+    route: GET /bookmarks/:id
+    public
+    do:
+      find bookmark by id, include tags
+
+  to update(id: string, title?: string, description?: string, tags?: string[])
+    -> Bookmark | NotFound | ValidationFailed
+    route: PATCH /bookmarks/:id
+    saves: Bookmark, Tag
+    do:
+      find bookmark
+      update provided fields
+      if tags provided: replace tag associations
+
+  to delete(id: string) -> void | NotFound
+    route: DELETE /bookmarks/:id
+    do:
+      find bookmark, delete it and orphaned tags
+
+// ─── Tests ─────────────────────────────────────────────
+
+test create_and_find
+  call bookmarks.create("https://gist-lang.dev", "GIST", tags: ["language", "ai"])
+  expect: returns Bookmark with 2 tags
+
+  then call bookmarks.list(tag: "ai")
+  expect: includes bookmark with title "GIST"
+
+test invalid_url_rejected
+  call bookmarks.create("not-a-url", "Bad")
+  must fail: ValidationFailed
+
+test search_by_query
+  given: bookmark with title "Rust Programming Guide"
+  call bookmarks.list(q: "rust")
+  expect: includes bookmark with title containing "Rust"
+
+test update_tags
+  given: bookmark with tags ["old"]
+  call bookmarks.update(bookmark.id, tags: ["new", "updated"])
+  expect: bookmark has 2 tags, "old" tag removed
+
+test delete_cleans_orphans
+  given: bookmark with unique tag "ephemeral"
+  call bookmarks.delete(bookmark.id)
+  then call bookmarks.list(tag: "ephemeral")
+  expect: returns empty list

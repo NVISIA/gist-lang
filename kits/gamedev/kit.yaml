@@ -1,0 +1,127 @@
+kit: gamedev
+version: 1.0.0
+author: gist-core
+description: Game development constructs — scenes, entities, input mapping, and game loop for any engine
+license: MIT
+
+yaml_sections:
+  engine:
+    description: Game engine and version
+    fields:
+      name: { type: string, required: true }
+      version: { type: string }
+      renderer: { type: string }
+      target_fps: { type: integer, default: 60 }
+  physics:
+    description: Physics engine configuration
+    fields:
+      type: { type: string, values: [built-in, box2d, rapier, matter, none] }
+      gravity: { type: object }
+      pixel_scale: { type: number }
+  assets:
+    description: Asset pipeline configuration
+    fields:
+      base_path: { type: string }
+      sprites: { type: string }
+      audio: { type: string }
+      tilesets: { type: string }
+      fonts: { type: string }
+  audio:
+    description: Audio bus configuration
+    fields:
+      music_bus: { type: string }
+      sfx_bus: { type: string }
+      master_volume: { type: number, default: 1.0 }
+  input:
+    description: Default input mappings
+    fields:
+      "[action]": { type: object }
+
+keywords:
+  - scene
+  - entity
+  - component
+  - system
+  - input
+  - spawn
+  - destroy
+
+extends:
+  - state        # entity states and scene transitions
+  - on           # game events (collision, pickup, damage)
+  - fn           # pure game math (damage formulas, pathfinding)
+  - rules        # balance tables, loot tables, XP curves
+  - always       # game-wide invariants (health clamping, etc.)
+  - ephemeral    # transient game state (particles, buffs, cooldowns)
+  - code         # game math (physics, procedural generation)
+
+constructs:
+  scene:
+    kind: declaration
+    name_style: PascalCase
+    doc: A discrete game screen or mode (menu, level, cutscene)
+    fields:
+      layers: { type: list, doc: Rendering layer order (back to front) }
+    supports: [context_line]
+    children: [input]
+    snippet: |
+      scene ${1:Name}
+        on start:
+          ${0}
+  entity:
+    kind: block
+    name_style: PascalCase
+    doc: A game object that exists in the world with spatial properties
+    fields:
+      position: { type: type_name, doc: Spatial position }
+      velocity: { type: type_name, doc: Movement vector }
+      sprite: { type: literal, doc: Visual representation path }
+      animation: { type: identifier, doc: Animation state machine reference }
+      hitbox: { type: expression, doc: "Collision shape: rectangle(w,h), circle(r), polygon(pts)" }
+      collision_layer: { type: identifier, doc: Collision group this entity belongs to }
+      collision_mask: { type: list, doc: Collision groups this entity detects }
+    supports: [always, context_line, field_passthrough]
+    snippet: |
+      entity ${1:Name} {
+        position: Coord
+        sprite: "${2:sprite.png}"
+        hitbox: ${3:rectangle(16, 16)}
+        ${0}
+      }
+  component:
+    kind: block
+    name_style: PascalCase
+    doc: Reusable bundle of fields and constraints that attach to entities
+    supports: [always]
+    snippet: |
+      component ${1:Name} {
+        ${0}
+      }
+  system:
+    kind: declaration
+    name_style: PascalCase
+    doc: Per-frame logic that operates on entities matching a query
+    fields:
+      query: { type: prose, doc: Entity filter (e.g. "entities with Movable, position") }
+    supports: [context_line, code]
+    snippet: |
+      system ${1:Name}
+        query: entities with ${2:Component}
+        update(dt):
+          ${0}
+  input:
+    kind: declaration
+    name_style: none
+    doc: Input action-to-key mapping block
+    snippet: |
+      input:
+        ${1:action}: [${2:key}]
+        ${0}
+  spawn:
+    kind: inline
+    name_style: none
+    doc: Instantiate an entity in the game world
+  destroy:
+    kind: inline
+    name_style: none
+    doc: Remove an entity from the game world (with cleanup)

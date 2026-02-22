@@ -1,0 +1,85 @@
+project: todo-app
+version: 0.1.0
+description: A full-stack todo application with React frontend and Java backend
+
+runtime:
+  language: Java
+  version: "21"
+  package_manager: gradle
+
+framework:
+  name: Spring Boot
+  version: "3.x"
+
+database:
+  type: PostgreSQL
+  version: "16.x"
+  orm: Spring Data JPA
+  migrations: managed
+  connection:
+    env: DATABASE_URL
+
+cache:
+  type: Redis
+  connection:
+    env: REDIS_URL
+
+auth:
+  strategy: JWT
+  token_expiry: 24h
+  refresh_token: true
+  password_hashing: bcrypt
+
+api:
+  style: REST
+  prefix: /api/v1
+  docs: OpenAPI
+  cors:
+    origins: ["http://localhost:5173"]
+
+services:
+  email:
+    type: REST
+    base_url_env: EMAIL_SERVICE_URL
+    auth:
+      type: api_key
+      key_env: EMAIL_API_KEY
+
+testing:
+  framework: JUnit 5
+  coverage: true
+
+deploy:
+  target: Docker
+  compose: true
+
+env:
+  DATABASE_URL:
+    type: string
+    required: true
+    secret: true
+  REDIS_URL:
+    type: string
+    required: true
+  JWT_SECRET:
+    type: string
+    required: true
+    secret: true
+  EMAIL_SERVICE_URL:
+    type: string
+    required: true
+  EMAIL_API_KEY:
+    type: string
+    required: true
+    secret: true
+  PORT:
+    type: integer
+    default: 8080
+
+conventions:
+  id_format: uuid
+  timestamps: ISO-8601-UTC
+  soft_delete: true
+  json_keys: camelCase
+  db_columns: snake_case
+  error_format: { code, message, details }

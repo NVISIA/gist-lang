@@ -1,0 +1,252 @@
+project deployer
+  > CLI tool for deploying containerized applications to AWS.
+  > Manages ECS services, builds Docker images, runs health checks,
+  > and handles rollback on failure.
+
+  kit: cli, iac
+  stack: gist.yaml
+
+  style:
+    colored terminal output
+    progress spinners for long operations
+    structured logging to stderr, user output to stdout
+
+  rules environments:
+    dev:     { cluster: "dev-cluster",  min_instances: 1, max_instances: 2  }
+    staging: { cluster: "stg-cluster",  min_instances: 2, max_instances: 4  }
+    prod:    { cluster: "prod-cluster", min_instances: 3, max_instances: 10 }
+
+  always:
+    never deploy to prod without explicit --confirm flag
+    all operations are idempotent
+    rollback on any failure during deploy
+
+// ─── Types ─────────────────────────────────────────────
+
+type ServiceName = string {
+  format: "[a-z][a-z0-9-]{1,62}"
+}
+
+type ImageTag = string
+
+DeployStatus = pending | building | pushing | deploying | healthy | failed | rolled_back
+
+// ─── Models ────────────────────────────────────────────
+
+ServiceConfig = {
+  name: ServiceName
+  dockerfile: string = "./Dockerfile"
+  port: int = 8080
+  health_check: string = "/health"
+  cpu: int = 256
+  memory: int = 512
+  env_vars?: { name: string, value_env: string }[]
+}
+
+Deployment = {
+  id: string, generated, ulid
+  service: ServiceName
+  environment: string
+  image_tag: ImageTag
+  status: DeployStatus = pending
+  started_at: datetime, generated
+  completed_at?: datetime
+  error_message?: string
+  previous_tag?: ImageTag
+}
+
+// ─── State Machine ─────────────────────────────────────
+
+state DeployLifecycle for Deployment.status:
+  pending -> building -> pushing -> deploying -> healthy
+  building -> failed
+  pushing -> failed
+  deploying -> failed
+  failed -> rolled_back
+
+  on enter failed:
+    set error_message from context
+    set completed_at to now
+  on enter healthy:
+    set completed_at to now
+  on enter rolled_back:
+    set completed_at to now
+
+// ─── CLI Commands ──────────────────────────────────────
+
+command deploy
+  > Deploy a service to an environment.
+
+  arg service: ServiceName
+    > Name of the service to deploy.
+
+  flag env: string = "dev"
+    short: e
+    values: [dev, staging, prod]
+    > Target environment.
+
+  flag tag: ImageTag
+    short: t
+    > Docker image tag. Defaults to git SHA.
+
+  flag confirm: bool = false
+    > Required for production deployments.
+
+  flag dry_run: bool = false
+    > Show what would happen without executing.
+
+  flow deploy_service(service, env, tag, confirm, dry_run)
+    -> Deployment | error
+
+    stage validate:
+      load service config from deployer.toml
+      verify service exists in config
+      if env is "prod" and not confirm:
+        fail with "Production deploy requires --confirm"
+      if dry_run:
+        output table showing planned actions
+        return early
+
+    stage build:
+      output progress "Building image..."
+      run docker build with service.dockerfile
+      tag image as registry/service:tag
+      compensate:
+        remove local image
+
+    stage push:
+      output progress "Pushing to registry..."
+      push image to DOCKER_REGISTRY
+      compensate:
+        delete image from registry
+
+    stage deploy:
+      output progress "Deploying to {env}..."
+      look up cluster from environments[env]
+      update ECS service with new image
+      set previous_tag to current running tag
+      compensate:
+        revert ECS service to previous_tag
+        output "Rolled back to {previous_tag}"
+
+    stage health_check:
+      output progress "Waiting for health check..."
+      poll service.health_check every 5s for up to 120s
+      if healthy: transition to healthy
+      if timeout: transition to failed with "Health check timed out"
+
+    must: image tag is not empty
+    ensure: deployment has a terminal status (healthy, failed, or rolled_back)
+
+command status
+  > Show deployment status for a service.
+
+  arg service: ServiceName
+
+  flag env: string = "dev"
+    short: e
+    values: [dev, staging, prod]
+
+  to show_status(service, env)
+    do:
+      look up latest deployment for service in env
+      output table:
+        service, environment, image_tag, status, started_at, completed_at
+      if status is "failed":
+        output error_message in red
+
+command rollback
+  > Roll back a service to its previous image.
+
+  arg service: ServiceName
+
+  flag env: string = "dev"
+    short: e
+    values: [dev, staging, prod]
+
+  flag confirm: bool = false
+
+  to rollback_service(service, env, confirm)
+    -> Deployment | error
+    do:
+      find latest healthy deployment for service in env
+      if env is "prod" and not confirm:
+        fail with "Production rollback requires --confirm"
+      if no previous_tag:
+        fail with "No previous deployment to roll back to"
+      update ECS service to previous_tag
+      output "Rolled back {service} in {env} to {previous_tag}"
+
+command list
+  > List all configured services.
+
+  flag env: string
+    short: e
+    > Filter by environment.
+
+  to list_services(env)
+    do:
+      read all services from deployer.toml
+      for each service: show latest deployment status per environment
+      output table:
+        service, dev status, staging status, prod status
+
+// ─── Infrastructure ────────────────────────────────────
+
+resource EcsCluster {
+  provider: aws
+  > One cluster per environment, as defined in rules.
+  for each env in environments:
+    name: env.cluster
+}
+
+resource EcsService {
+  provider: aws
+  needs: EcsCluster
+  > One service per (service, environment) pair.
+  container_port: from service config
+  desired_count: from environments[env].min_instances
+  auto_scaling:
+    min: environments[env].min_instances
+    max: environments[env].max_instances
+    target_cpu: 70
+}
+
+resource EcrRepository {
+  provider: aws
+  > One ECR repo per service.
+  for each service in config:
+    name: service.name
+    image_scanning: true
+    lifecycle_policy: keep last 10 images
+}
+
+// ─── Tests ─────────────────────────────────────────────
+
+test deploy_to_dev_succeeds
+  given: service "api" configured, dev cluster running
+  call deploy_service("api", "dev", tag: "abc123", confirm: false, dry_run: false)
+  expect:
+    deployment status is "healthy"
+    completed_at is not null
+
+test prod_requires_confirm
+  call deploy_service("api", "prod", tag: "abc123", confirm: false, dry_run: false)
+  must fail: error with message "requires --confirm"
+
+test dry_run_does_not_deploy
+  call deploy_service("api", "dev", tag: "abc123", confirm: false, dry_run: true)
+  expect: no deployment record created
+
+test rollback_reverts_to_previous
+  given: service "api" with healthy deployment using tag "v1"
+  given: failed deployment attempt using tag "v2"
+  call rollback_service("api", "dev", confirm: false)
+  expect: ECS service running tag "v1"
+
+test health_check_timeout_triggers_rollback
+  given: service "api" with health check that never passes
+  call deploy_service("api", "dev", tag: "broken", confirm: false, dry_run: false)
+  expect:
+    deployment status is "rolled_back"
+    error_message contains "Health check timed out"

@@ -1,0 +1,49 @@
+project: bookmarks
+version: 0.1.0
+description: Personal bookmark manager with tags and search
+
+runtime:
+  language: TypeScript
+  platform: Node.js
+  package_manager: pnpm
+
+framework:
+  name: Fastify
+
+database:
+  type: SQLite
+  orm: Drizzle
+  migrations: managed
+  connection:
+    env: DATABASE_URL
+
+auth:
+  strategy: JWT
+  token_expiry: 7d
+
+api:
+  style: REST
+  prefix: /api
+  docs: OpenAPI
+
+testing:
+  framework: Vitest
+
+env:
+  DATABASE_URL:
+    type: string
+    default: "file:./dev.db"
+  JWT_SECRET:
+    type: string
+    required: true
+    secret: true
+  PORT:
+    type: integer
+    default: 3000
+
+conventions:
+  id_format: cuid
+  timestamps: ISO-8601-UTC
+  soft_delete: false
+  json_keys: camelCase
+  db_columns: snake_case

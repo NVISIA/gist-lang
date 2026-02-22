@@ -1,0 +1,548 @@
+project todo-app
+  > A full-stack todo application. Users can register, log in,
+  > create/manage todo items organized into lists, and share
+  > lists with other users. Backend is Java/Spring Boot, frontend
+  > is React with TypeScript.
+
+  kit: web
+  stack: gist.yaml
+
+  style:
+    all endpoints return consistent JSON envelope
+    use constructor injection throughout
+    repository pattern for data access
+    service layer handles business logic
+
+  rules priorities:
+    critical: { color: "#DC2626", sort_order: 0 }
+    high:     { color: "#F59E0B", sort_order: 1 }
+    medium:   { color: "#3B82F6", sort_order: 2 }
+    low:      { color: "#6B7280", sort_order: 3 }
+
+  always:
+    every response includes a request_id for tracing
+    soft-deleted records are excluded from all queries by default
+    all user-facing strings are trimmed and sanitized
+
+  before:
+    log request with method, path, user_id, request_id
+
+  after:
+    log response with status_code, duration_ms, request_id
+
+// ─── Types ─────────────────────────────────────────────
+
+type Email = string {
+  format: email
+}
+
+type TodoTitle = string {
+  format: ".{1,200}"
+}
+
+// ─── Traits ────────────────────────────────────────────
+
+trait Timestamped {
+  created_at: datetime, generated
+  updated_at: datetime, generated
+  always: updated_at >= created_at
+}
+
+trait SoftDeletable {
+  is_deleted: bool = false
+  deleted_at?: datetime
+}
+
+// ─── Enums ─────────────────────────────────────────────
+
+Priority = critical | high | medium | low
+TodoStatus = open | in_progress | done | cancelled
+Role = owner | editor | viewer
+
+// ─── Models ────────────────────────────────────────────
+
+User = {
+  ...Timestamped
+  ...SoftDeletable
+  id: string, generated, uuid
+  email: Email, unique
+  name: string
+  password_hash: string, secret
+}
+
+TodoList = {
+  ...Timestamped
+  ...SoftDeletable
+  id: string, generated, uuid
+  name: string
+  owner: -> User
+  task_count: int, computed
+    > count of non-deleted tasks in this list
+}
+
+Todo = {
+  ...Timestamped
+  ...SoftDeletable
+  id: string, generated, uuid
+  title: TodoTitle
+  description?: string
+  priority: Priority = medium
+  status: TodoStatus = open
+  due_date?: date
+  completed_at?: datetime
+  cancelled_at?: datetime
+  list: -> TodoList
+  created_by: -> User
+}
+
+ListShare = {
+  ...Timestamped
+  id: string, generated, uuid
+  list: -> TodoList
+  user: -> User
+  role: Role
+
+  always: role != "owner"
+    > owner is implicit via TodoList.owner
+}
+
+RefreshToken = ephemeral {
+  token: string
+  user: -> User
+  ttl: 7d
+}
+
+// ─── State Machine ─────────────────────────────────────
+
+state TodoLifecycle for Todo.status:
+  open -> in_progress -> done
+  open -> cancelled
+  in_progress -> open
+  in_progress -> cancelled
+  done -> open
+
+  on enter done:
+    set completed_at to now
+  on enter cancelled:
+    set cancelled_at to now
+  on enter open:
+    set completed_at to null
+    set cancelled_at to null
+
+// ─── Module: Auth ──────────────────────────────────────
+
+module auth
+  > JWT-based authentication with refresh tokens.
+
+  to register(email: Email, password: string, name: string) -> User | ValidationFailed
+    route: POST /auth/register
+    public
+    saves: User
+    emits: user_registered
+
+    do:
+      validate email is unique
+      hash password with bcrypt
+      create User
+    fails:
+      ValidationFailed when email already exists
+    must: password is at least 8 characters
+    ensure: returned user does not include password_hash
+
+    eg: register("alice@example.com", "securepass", "Alice")
+      => { id: "u_1", email: "alice@example.com", name: "Alice" }
+
+  to login(email: Email, password: string) -> { access_token: string, refresh_token: string } | Unauthorized
+    route: POST /auth/login
+    public
+
+    do:
+      find user by email
+      verify password against hash
+      generate JWT access token
+      generate and store refresh token
+    fails:
+      Unauthorized when credentials are invalid
+
+  to refresh(refresh_token: string) -> { access_token: string } | Unauthorized
+    route: POST /auth/refresh
+    public
+
+    do:
+      look up refresh token in cache
+      verify it hasn't expired
+      generate new access token
+    fails:
+      Unauthorized when token is expired or invalid
+
+  to logout()
+    route: POST /auth/logout
+    guard: user is authenticated
+
+    do:
+      invalidate refresh token in cache
+
+  to me() -> User
+    route: GET /auth/me
+    guard: user is authenticated
+
+    do:
+      return current user without password_hash
+
+// ─── Module: Lists ─────────────────────────────────────
+
+module lists
+  > CRUD for todo lists with sharing.
+  needs: User, TodoList, ListShare
+
+  before:
+    guard: user is authenticated
+
+  to create_list(name: string) -> TodoList | ValidationFailed
+    route: POST /lists
+    saves: TodoList
+    emits: list_created
+
+    do:
+      validate name is not blank
+      create TodoList with current user as owner
+    must: name length between 1 and 100
+
+  to get_lists() -> TodoList[]
+    route: GET /lists
+
+    do:
+      return lists owned by or shared with current user
+      include task_count
+      order by updated_at descending
+
+  to get_list(list_id: string) -> TodoList | NotFound
+    route: GET /lists/:list_id
+
+    do:
+      find list by id
+      verify user has access (owner or shared)
+    fails:
+      NotFound when list doesn't exist or user has no access
+
+  to update_list(list_id: string, name: string) -> TodoList | NotFound | Forbidden
+    route: PATCH /lists/:list_id
+    saves: TodoList
+
+    do:
+      find list, verify user is owner or editor
+      update name
+    fails:
+      Forbidden when user is viewer
+
+  to delete_list(list_id: string) -> void | NotFound | Forbidden
+    route: DELETE /lists/:list_id
+    saves: TodoList
+    emits: list_deleted
+
+    do:
+      find list, verify user is owner
+      soft-delete list and all its todos
+    fails:
+      Forbidden when user is not owner
+
+  to share_list(list_id: string, email: Email, role: Role) -> ListShare | NotFound | ValidationFailed
+    route: POST /lists/:list_id/share
+    saves: ListShare
+    uses: email
+    emits: list_shared
+
+    do:
+      find list, verify current user is owner
+      find target user by email
+      create ListShare
+      send invitation email via email service
+    fails:
+      ValidationFailed when sharing with self or duplicate share
+      NotFound when target user not found
+
+  to remove_share(list_id: string, share_id: string) -> void | NotFound | Forbidden
+    route: DELETE /lists/:list_id/share/:share_id
+    saves: ListShare
+
+    do:
+      verify current user is list owner
+      delete the share record
+
+// ─── Module: Todos ─────────────────────────────────────
+
+module todos
+  > CRUD for todo items within lists.
+  needs: User, Todo, TodoList, TodoLifecycle
+
+  before:
+    guard: user is authenticated
+
+  fn sort_todos(todos: Todo[], field: string, direction: string) -> Todo[]
+    > Sort todos by the given field. Priority sorts by the
+    > rules table sort_order, not alphabetically.
+    match field:
+      "priority" -> sort by priorities[todo.priority].sort_order
+      "due_date" -> sort by due_date, nulls last
+      _ -> sort by field
+
+    must: direction is "asc" or "desc"
+
+  to create_todo(list_id: string, title: TodoTitle, description?: string, priority?: Priority, due_date?: date)
+    -> Todo | NotFound | ValidationFailed
+    route: POST /lists/:list_id/todos
+    saves: Todo
+    emits: todo_created
+
+    do:
+      verify user has access to list (owner or editor)
+      create Todo with status "open"
+    fails:
+      NotFound when list doesn't exist or no access
+      ValidationFailed when title is empty
+    must: if due_date provided, it must be today or future
+
+  to get_todos(list_id: string, status?: string, priority?: Priority, sort?: string, direction?: string)
+    -> Todo[]
+    route: GET /lists/:list_id/todos
+
+    do:
+      verify user has access to list
+      filter by status and priority if provided
+      sort using sort_todos, default by created_at desc
+
+  to get_todo(list_id: string, todo_id: string) -> Todo | NotFound
+    route: GET /lists/:list_id/todos/:todo_id
+
+    do:
+      find todo, verify it belongs to the list, verify user access
+
+  to update_todo(list_id: string, todo_id: string, title?: TodoTitle, description?: string, priority?: Priority, due_date?: date)
+    -> Todo | NotFound | Forbidden
+    route: PATCH /lists/:list_id/todos/:todo_id
+    saves: Todo
+    emits: todo_updated
+
+    do:
+      find todo, verify user is owner or editor
+      update provided fields
+    fails:
+      Forbidden when user is viewer
+
+  to transition_todo(list_id: string, todo_id: string, status: string)
+    -> Todo | NotFound | ValidationFailed
+    route: PATCH /lists/:list_id/todos/:todo_id/status
+    saves: Todo
+    emits: todo_status_changed
+
+    do:
+      find todo, verify user has editor access or above
+      transition via TodoLifecycle
+    fails:
+      ValidationFailed when transition is invalid
+
+  to delete_todo(list_id: string, todo_id: string) -> void | NotFound | Forbidden
+    route: DELETE /lists/:list_id/todos/:todo_id
+    saves: Todo
+
+    do:
+      find todo, verify user is owner or editor
+      soft-delete
+
+// ─── Events ────────────────────────────────────────────
+
+on user_registered(user):
+  log "New user registered" with user.email
+
+on list_shared(list, share, target_user):
+  > Email notification is sent in the share_list intent via uses: email.
+  > This handler is for any additional side effects.
+  log "List shared" with list.id, target_user.email
+
+on todo_status_changed(todo, old_status, new_status) when new_status == "done":
+  > Could trigger gamification, streak tracking, etc.
+  log "Todo completed" with todo.id
+
+// ─── Web Kit: React Frontend ───────────────────────────
+
+page LoginPage
+  route: /login
+  title: "Sign In — Todo App"
+
+  client_state:
+    email: string = ""
+    password: string = ""
+    error?: string
+
+  on submit:
+    call auth.login(email, password)
+    if success: navigate to /lists
+    if error: set error to message
+
+page RegisterPage
+  route: /register
+  title: "Sign Up — Todo App"
+
+  client_state:
+    email: string = ""
+    password: string = ""
+    name: string = ""
+    error?: string
+
+  on submit:
+    call auth.register(email, password, name)
+    if success: navigate to /login
+    if error: set error to message
+
+layout AppLayout
+  auth: required
+  > Main app shell with sidebar for lists, header with user info,
+  > and content area for the selected list.
+
+  slot sidebar
+  slot content
+
+page ListsPage
+  route: /lists
+  layout: AppLayout
+  title: "My Lists — Todo App"
+  auth: required
+
+  data:
+    lists: call lists.get_lists()
+
+  on create_list(name):
+    call lists.create_list(name)
+    refresh lists
+
+  on delete_list(list_id):
+    call lists.delete_list(list_id)
+    refresh lists
+
+page TodosPage
+  route: /lists/:list_id
+  layout: AppLayout
+  title: "Todos — Todo App"
+  auth: required
+
+  data:
+    list: call lists.get_list(list_id)
+    todos: call todos.get_todos(list_id)
+
+  client_state:
+    filter_status?: string
+    filter_priority?: Priority
+    sort_field: string = "created_at"
+    sort_direction: string = "desc"
+
+  on create_todo(title, priority, due_date):
+    call todos.create_todo(list_id, title, priority: priority, due_date: due_date)
+    refresh todos
+
+  on toggle_done(todo_id, current_status):
+    if current_status == "done":
+      call todos.transition_todo(list_id, todo_id, "open")
+    else:
+      call todos.transition_todo(list_id, todo_id, "done")
+    refresh todos
+
+  on delete_todo(todo_id):
+    call todos.delete_todo(list_id, todo_id)
+    refresh todos
+
+page SharePage
+  route: /lists/:list_id/share
+  layout: AppLayout
+  title: "Share List — Todo App"
+  auth: required
+
+  data:
+    list: call lists.get_list(list_id)
+
+  client_state:
+    email: string = ""
+    role: Role = "viewer"
+
+  on share(email, role):
+    call lists.share_list(list_id, email, role)
+    set email to ""
+
+// ─── Tests ─────────────────────────────────────────────
+
+test register_and_login
+  call auth.register("test@example.com", "password123", "Tester")
+  expect: returns User with email "test@example.com"
+
+  then call auth.login("test@example.com", "password123")
+  expect: returns access_token and refresh_token
+
+test register_duplicate_email
+  given: existing user with email "taken@example.com"
+  call auth.register("taken@example.com", "password123", "Dup")
+  must fail:
+    ValidationFailed with message containing "already exists"
+
+test create_and_complete_todo
+  given: authenticated user, list "My Tasks"
+  call todos.create_todo(list.id, "Buy groceries", priority: "high")
+  expect: returns Todo with status "open", priority "high"
+
+  then call todos.transition_todo(list.id, todo.id, "in_progress")
+  expect: status is "in_progress"
+
+  then call todos.transition_todo(list.id, todo.id, "done")
+  expect:
+    status is "done"
+    completed_at is not null
+
+test invalid_transition_rejected
+  given: authenticated user, todo with status "done"
+  call todos.transition_todo(list.id, todo.id, "in_progress")
+  must fail:
+    ValidationFailed with message about invalid transition
+
+test list_sharing_flow
+  given: user Alice owns list "Shared Project"
+  given: user Bob exists
+
+  as Alice:
+    call lists.share_list(list.id, "bob@example.com", "editor")
+    expect: returns ListShare with role "editor"
+
+  as Bob:
+    call lists.get_lists()
+    expect: includes list "Shared Project"
+
+    call todos.create_todo(list.id, "Bob's task")
+    expect: returns Todo
+
+test viewer_cannot_edit
+  given: user Alice owns list "Read Only"
+  given: user Charlie has viewer share on list
+
+  as Charlie:
+    call lists.get_todos(list.id)
+    expect: returns todos
+
+    call todos.create_todo(list.id, "Nope")
+    must fail:
+      Forbidden
+
+test soft_delete_excludes_from_queries
+  given: authenticated user, list with 3 todos
+  call todos.delete_todo(list.id, todo_1.id)
+  then call todos.get_todos(list.id)
+  expect: returns 2 todos, deleted todo not included
+
+test priority_sort_uses_rules_table
+  given: authenticated user, list with todos of each priority
+  call todos.get_todos(list.id, sort: "priority", direction: "asc")
+  expect:
+    first todo has priority "critical"
+    last todo has priority "low"
+
+test todo_due_date_validation
+  given: authenticated user, list "Deadlines"
+  call todos.create_todo(list.id, "Past task", due_date: "2020-01-01")
+  must fail:
+    ValidationFailed with message about future date

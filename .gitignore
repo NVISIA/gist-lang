@@ -1,0 +1,24 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node (if testing examples)
+node_modules/
+dist/
+.env
+
+# Rust (if testing examples)
+target/
+
+# Java (if testing examples)
+build/
+.gradle/
+
+# Generated
+*.generated.*

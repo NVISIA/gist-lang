@@ -1,0 +1,116 @@
+kit: iac
+version: 1.0.0
+author: gist-core
+description: Infrastructure as Code — generates Terraform HCL, Pulumi, or CDK from GIST resource declarations
+license: MIT
+
+yaml_sections:
+  iac:
+    description: IaC tool and settings
+    fields:
+      tool: { type: string, required: true, values: [terraform, pulumi, cdk] }
+      version: { type: string }
+      output_dir: { type: string, default: "." }
+      auto_format: { type: boolean, default: true }
+  providers:
+    description: Cloud provider configuration (maps to Terraform provider blocks)
+    fields:
+      "[name]":
+        type: object
+        fields:
+          region: { type: string }
+          region_env: { type: string }
+          default_region: { type: string }
+          profile_env: { type: string }
+          alias: { type: string }
+          default_tags: { type: object }
+          api_token_env: { type: string }
+  backend:
+    description: Terraform state backend configuration
+    fields:
+      type: { type: string, required: true, values: [s3, gcs, azurerm, local, remote] }
+      bucket_env: { type: string }
+      key: { type: string }
+      region_env: { type: string }
+      dynamodb_table_env: { type: string }
+      encrypt: { type: boolean }
+      organization: { type: string }
+      workspace_env: { type: string }
+
+keywords:
+  - resource
+  - group
+  - variable
+  - output
+  - data
+
+extends:
+  - always       # compliance constraints apply to all resources
+  - rules        # environment config tables feed resource fields
+  - needs        # dependency graph between resources
+
+constructs:
+  resource:
+    kind: block
+    name_style: PascalCase
+    doc: Declares a cloud infrastructure resource provisioned by a provider
+    fields:
+      provider: { type: identifier, doc: Cloud provider name, completions: [aws, gcp, azure, cloudflare] }
+      needs: { type: type_name_list, doc: Dependency references to other resources }
+      type: { type: prose, doc: Resource type hint (e.g. "RDS PostgreSQL 16") }
+      tags: { type: identifier, doc: Tagging strategy, values: [auto] }
+    supports: [must, context_line, field_passthrough]
+    snippet: |
+      resource ${1:Name} {
+        provider: ${2:aws}
+        ${0}
+      }
+  group:
+    kind: block
+    name_style: identifier
+    doc: Groups related resources into a logical module
+    children: [resource, data]
+    supports: [context_line]
+    snippet: |
+      group ${1:name} {
+        ${0}
+      }
+  variable:
+    kind: block
+    name_style: identifier
+    doc: Declares a Terraform input variable
+    fields:
+      type: { type: identifier, required: true, completions: [string, number, bool, list, map, object] }
+      default: { type: literal, doc: Default value if not provided }
+      values: { type: list, doc: Allowed values (validation constraint) }
+      sensitive: { type: boolean, doc: Mark as sensitive in Terraform output }
+    snippet: |
+      variable ${1:name} {
+        type: ${2:string}
+        ${0}
+      }
+  output:
+    kind: block
+    name_style: identifier
+    doc: Declares a Terraform output value
+    fields:
+      value: { type: expression, required: true, doc: Output value expression }
+      sensitive: { type: boolean, doc: Redact from Terraform output }
+    snippet: |
+      output ${1:name} {
+        value: ${2:expression}
+      }
+  data:
+    kind: block
+    name_style: PascalCase
+    doc: Read-only reference to existing infrastructure (Terraform data source)
+    fields:
+      provider: { type: identifier, completions: [aws, gcp, azure] }
+      type: { type: identifier, doc: Data source type }
+    supports: [field_passthrough]
+    snippet: |
+      data ${1:Name} {
+        provider: ${2:aws}
+        type: ${3:ami}
+        ${0}
+      }
