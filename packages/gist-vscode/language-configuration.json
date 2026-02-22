@@ -1,0 +1,28 @@
+{
+  "comments": {
+    "lineComment": "//",
+    "blockComment": ["/*", "*/"]
+  },
+  "brackets": [
+    ["{", "}"],
+    ["[", "]"],
+    ["(", ")"]
+  ],
+  "autoClosingPairs": [
+    { "open": "{", "close": "}" },
+    { "open": "[", "close": "]" },
+    { "open": "(", "close": ")" },
+    { "open": "\"", "close": "\"", "notIn": ["string"] }
+  ],
+  "surroundingPairs": [
+    { "open": "{", "close": "}" },
+    { "open": "[", "close": "]" },
+    { "open": "(", "close": ")" },
+    { "open": "\"", "close": "\"" }
+  ],
+  "indentationRules": {
+    "increaseIndentPattern": "^\\s*(project|module|to|fn|flow|on|test|state|trait|command|page|layout|component|resource|group|scene|entity|endpoint|screen)\\b.*$|^\\s*(always|style|rules|before|after|do|code|must|ensure|eg|fails|given|expect|stage|compensate|guard|data|client_state)\\s*:",
+    "decreaseIndentPattern": "^\\s*$"
+  },
+  "wordPattern": "[a-zA-Z_][a-zA-Z0-9_]*"
+}

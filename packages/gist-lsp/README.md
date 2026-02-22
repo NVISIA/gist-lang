@@ -1,0 +1,110 @@
+# @gist-lang/lsp
+
+Language Server Protocol (LSP) implementation for the [GIST language](../../README.md). Provides real-time diagnostics, context-aware completions, hover documentation, and semantic token highlighting for `.gist` files.
+
+## Features
+
+### Diagnostics
+
+**Parse-level** (from `@gist-lang/parser`):
+- Lexer errors (unexpected characters, unclosed strings)
+- Parser errors (unexpected tokens, missing required syntax)
+
+**Semantic-level:**
+- Duplicate name declarations (models, enums, types, modules)
+- Unknown type references in type positions
+- Duplicate HTTP routes (same method + path)
+- Purity violations in `fn` blocks (saves/emits/route/socket not allowed)
+- State machine validation (model existence, field existence, hook state references)
+- `uses:` referencing services not declared in `gist.yaml`
+- Spread validation (`...TraitName` references)
+- Kit keyword used without `kit:` declaration in project header
+- Kit construct missing required fields
+
+### Completions
+
+Context-aware suggestions across 16 completion contexts:
+- **Top level**: `project`, `module`, `type`, `trait`, `state`, `test`, `use`, `extend`, kit keywords
+- **Project header**: `kit:`, `stack:`, `style:`, `rules`, `always:`
+- **Module body**: `to`, `fn`, `flow`, `on`, `needs:`
+- **Intent body**: `route:`, `guard:`, `saves:`, `emits:`, `uses:`, `do:`, `must:`, `public`, `async`
+- **Type positions**: primitives (`string`, `int`, `bool`, ...) + declared models/enums/types/traits + `result<T>`, `map<K,V>`
+- **`uses:` position**: services from `gist.yaml`
+- **`kit:` position**: loaded kit names
+- **Kit construct body**: fields with value choices from `kit.yaml`
+
+All keyword completions include snippet insertion with tab stops.
+
+### Hover
+
+Rich documentation on hover for:
+- **Models**: fields (with trait spread resolution), modifiers, spreads
+- **Enums**: values
+- **Modules**: context description, intents, functions, flows
+- **Intents/fns**: full signature (params + return type), route, saves, emits, guard
+- **Kit keywords**: doc, fields, children (from `kit.yaml`)
+- **Services**: type, URL (from `gist.yaml`)
+- **State machines**: transitions, target model
+- **Traits**: fields
+- **Errors**: fields
+- **Type aliases**: base type
+- **Constants**: value
+
+### Semantic Tokens
+
+Supplements the static TextMate grammar with dynamic highlighting:
+- Kit keywords as `macro` (unknown to static grammar)
+- HTTP methods (`GET`, `POST`, etc.) as `method`
+- Field modifiers (`generated`, `unique`, `public`, etc.) as `modifier`
+- Function/intent names after `to`/`fn`/`flow` as `function`
+- Type names as `type`
+
+## Architecture
+
+```
+src/
+  server.ts                    # LSP entry point, capability registration, request handlers
+  index.ts                     # Entry point (imports server.ts)
+  workspace/
+    project-discovery.ts       # Find gist.yaml, .gist files, kit directories
+    gist-yaml-parser.ts        # Parse gist.yaml → typed GistProjectConfig
+    kit-loader.ts              # Parse kit.yaml → LoadedKit structures
+    kit-registry.ts            # Merge loaded kits into unified keyword/construct registry
+    types.ts                   # Workspace type definitions (GistProjectConfig, LoadedKit, etc.)
+  analysis/
+    symbol-table.ts            # Collect all declarations from AST into indexed lookup
+    validators.ts              # Semantic validation rules (duplicates, types, purity, etc.)
+  features/
+    diagnostics.ts             # Bridge AST → SymbolTable → validators → LSP diagnostics
+    completion.ts              # Context-aware autocomplete
+    hover.ts                   # Hover documentation
+    semantic-tokens.ts         # Dynamic semantic token highlighting
+```
+
+### Parse Pipeline
+
+On every document change, the server runs the full pipeline:
+
+1. **Lex** — tokenize source with kit keywords from the registry
+2. **Parse** — produce CST from tokens
+3. **AST** — transform CST to typed AST
+4. **Semantic analysis** — build symbol table, run validators, produce diagnostics
+5. **Cache** — store AST and symbol table for completion/hover requests
+
+### Workspace Discovery
+
+On initialization, the server:
+1. Discovers `gist.yaml`, all `.gist` files, and `kits/` directories
+2. Parses `gist.yaml` into a typed project configuration
+3. Loads all `kit.yaml` files into a `KitRegistry`
+4. Passes kit keywords to the lexer for dynamic keyword recognition
+
+## Integration
+
+This package is designed to be used via an editor client. See [`gist-vscode`](../gist-vscode/) for a reference VS Code integration.
+
+The server communicates over the LSP protocol and registers these capabilities:
+- `textDocumentSync: Full`
+- `completionProvider` (trigger characters: `:`, `.`, ` `)
+- `hoverProvider`
+- `semanticTokensProvider` (full document)

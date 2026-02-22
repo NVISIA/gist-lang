@@ -80,6 +80,16 @@ Kits extend GIST with domain-specific keywords. Each kit is a directory with `ki
 | [todo-app](examples/todo-app/) | Medium | Java, Spring Boot, React | State machines, web kit, sharing, events |
 | [deployer](examples/deployer/) | Complex | Rust | Multi-kit (cli + iac), flow sagas, rollback |
 
+## Tooling
+
+The `packages/` directory contains editor tooling for GIST, built as a pnpm monorepo:
+
+| Package | Description |
+|---------|-------------|
+| [@gist-lang/parser](packages/gist-parser/) | Standalone lexer, parser, and AST for `.gist` files |
+| [@gist-lang/lsp](packages/gist-lsp/) | Language Server with diagnostics, completions, hover, and semantic tokens |
+| [gist-lang](packages/gist-vscode/) | VS Code extension providing full GIST language support |
+
 ## How It Works
 
 1. Write a `gist.yaml` (infrastructure) and `.gist` files (behavior)
@@ -101,26 +111,41 @@ GIST is **paradigm-agnostic** — the core spec handles models, types, intents, 
 
 ```
 gist-lang/
-  spec/                        # language specification
-    GIST-spec-v0.7.md           # core spec
-    GIST-grammar.md             # formal grammar (EBNF)
-    gist-yaml-spec.md           # manifest spec
-    GIST-interpreter.md         # LLM system prompt
-  docs/                        # guides
-    GIST-getting-started.md     # quick start
-    GIST-kit-authoring.md       # kit creation guide
-  kits/                        # built-in kits
-    iac/                        # Infrastructure as Code
-    gamedev/                    # Game Development
-    cli/                        # Command-Line Apps
-    mobile/                     # Mobile Apps
-    web/                        # Web Frontends
-    api/                        # API-First Design
-  examples/                    # example projects
-    bookmarks/                  # simple REST API
-    todo-app/                   # full-stack app
-    deployer/                   # multi-kit CLI tool
+  packages/                      # editor tooling (pnpm monorepo)
+    gist-parser/                  # standalone parser library
+      src/lexer/                   # tokenizer with INDENT/DEDENT
+      src/parser/                  # recursive descent parser → CST
+      src/ast/                     # CST → typed AST transformation
+    gist-lsp/                     # Language Server Protocol server
+      src/workspace/               # project discovery, kit loading
+      src/analysis/                # symbol table, semantic validators
+      src/features/                # diagnostics, completion, hover, semantic tokens
+    gist-vscode/                  # VS Code extension
+      src/extension.ts             # LSP client activation
+      syntaxes/                    # TextMate grammar
+  spec/                          # language specification
+    GIST-spec-v0.7.md             # core spec
+    GIST-grammar.md               # formal grammar (EBNF)
+    gist-yaml-spec.md             # manifest spec
+    GIST-interpreter.md           # LLM system prompt
+  docs/                          # guides
+    GIST-getting-started.md       # quick start
+    GIST-kit-authoring.md         # kit creation guide
+  kits/                          # built-in domain kits
+    api/  cli/  gamedev/  iac/  mobile/  web/
+  examples/                      # example projects
+    bookmarks/  todo-app/  deployer/
 ```
+
+## Development
+
+```bash
+pnpm install          # install dependencies
+pnpm build            # build all packages (parser → lsp → vscode)
+pnpm test             # run all 182 tests across 6 test files
+```
+
+Requires Node.js 18+ and pnpm.
 
 ## License
 
