@@ -12,13 +12,34 @@ GIST sits between natural language prompts (too ambiguous) and traditional sourc
 
 ---
 
+## Install the CLI
+
+```bash
+npm install -g @gist-lang/cli
+```
+
+This gives you the `gist` command with tools for scaffolding, validating, formatting, and managing GIST projects.
+
+---
+
 ## Your First GIST Project
 
 Let's build a simple bookmark API — users save URLs with tags, and can search them.
 
-### Step 1: Create the manifest
+### Step 1: Scaffold the project
 
-Every GIST project starts with a `gist.yaml` file that describes your infrastructure:
+```bash
+gist init bookmarks --language typescript --agent claude-code
+```
+
+This creates:
+- `gist.yaml` — your infrastructure manifest
+- `bookmarks.gist` — a starter spec file
+- `.claude/commands/` — AI agent slash commands for code generation
+
+### Step 2: Write the manifest
+
+Edit `gist.yaml` to describe your infrastructure:
 
 ```yaml
 project: bookmarks
@@ -74,9 +95,9 @@ conventions:
 
 This tells the LLM: build me a Fastify app in TypeScript with SQLite and JWT auth. Every service, database, and convention is declared here — not in the `.gist` file.
 
-### Step 2: Write the spec
+### Step 3: Write the spec
 
-Create `bookmarks.gist`:
+Edit `bookmarks.gist`:
 
 ```gist
 project bookmarks
@@ -87,7 +108,7 @@ project bookmarks
     URLs must be valid (http or https)
     tags are lowercase and trimmed
 
-// ─── Models ────────────────────────────────────────────
+// --- Models ---
 
 Tag = { id: string, generated, cuid; name: string, unique }
 
@@ -101,7 +122,7 @@ Bookmark = {
   updated_at: datetime, generated
 }
 
-// ─── Module ────────────────────────────────────────────
+// --- Module ---
 
 module bookmarks
 
@@ -130,7 +151,7 @@ module bookmarks
     do:
       find bookmark, delete it and orphaned tags
 
-// ─── Tests ─────────────────────────────────────────────
+// --- Tests ---
 
 test create_and_find
   call bookmarks.create("https://gist-lang.dev", "GIST", tags: ["language", "ai"])
@@ -151,17 +172,49 @@ test search_by_query
 
 That's it. ~60 lines of spec describe a complete API with validation, search, and tests.
 
-### Step 3: Generate code
+### Step 4: Validate your spec
 
-Feed both files to an LLM with the GIST interpreter instructions:
-
-```
-You are a GIST interpreter. Read the attached spec and generate a complete project.
-
-[Attach: GIST-spec-v0.7.md, GIST-interpreter.md, gist.yaml, bookmarks.gist]
+```bash
+gist check
 ```
 
-The LLM produces: Fastify routes, Drizzle models, SQLite migrations, JWT middleware, Vitest tests, `.env.example`, Dockerfile, and a README.
+```
+ bookmarks.gist — no issues found.
+```
+
+Run with `--checklist` for spec quality feedback:
+
+```bash
+gist check --checklist
+```
+
+This reports on completeness, error handling, test coverage, guard coverage, and underspecification.
+
+### Step 5: Format your spec
+
+```bash
+gist fmt --write
+```
+
+Normalizes indentation, spacing, and blank lines across all `.gist` files. Use `--check` in CI to enforce formatting.
+
+### Step 6: Generate code
+
+If you installed agent skills (via `--agent` in Step 1), use your AI agent's slash command:
+
+```
+/gist.generate
+```
+
+The AI agent reads your specs, the interpreter instructions, and your manifest, then generates a complete project: routes, models, migrations, tests, Dockerfile, and README.
+
+**Alternative — manual LLM prompting:**
+
+```bash
+gist bundle --output prompt.md
+```
+
+This assembles all project inputs into a single prompt you can paste into any LLM.
 
 ---
 
@@ -223,17 +276,6 @@ module payments
     ...
 ```
 
-### Rules tables are named constants
-
-```gist
-rules pricing:
-  basic: { price: 0, storage: "5GB", support: "community" }
-  pro:   { price: 29, storage: "100GB", support: "email" }
-  team:  { price: 79, storage: "1TB", support: "priority" }
-```
-
-Accessed by name in `fn` blocks: `pricing[plan].price`.
-
 ### Tests are behavioral
 
 ```gist
@@ -251,7 +293,45 @@ project my-app
   stack: gist.yaml
 ```
 
-Kits add domain-specific keywords without changing the core spec. Built-in kits: `iac`, `gamedev`, `cli`, `mobile`, `web`, `api`. Community kits can cover anything.
+Kits add domain-specific keywords without changing the core spec. Built-in kits: `web`, `api`, `cli`, `mobile`, `iac`, `gamedev`. Create your own with `gist kit create <name>`.
+
+---
+
+## CLI Reference
+
+| Command | Description |
+|---------|-------------|
+| `gist init [name]` | Scaffold a new project |
+| `gist check [files...]` | Validate syntax and semantics |
+| `gist check --checklist` | Include spec quality checks |
+| `gist fmt [files...]` | Format .gist files |
+| `gist fmt --write` | Write formatted output in place |
+| `gist fmt --check` | Check formatting (CI mode) |
+| `gist kit list` | List available kits |
+| `gist kit install <name>` | Install a kit |
+| `gist kit create <name>` | Scaffold a custom kit |
+| `gist kit validate [path]` | Validate kit structure |
+| `gist skills install --agent <name>` | Install AI agent skills |
+| `gist skills list` | Show installed skills |
+| `gist bundle` | Assemble project into a prompt |
+
+See the [full CLI documentation](../packages/gist-cli/README.md) for all options and flags.
+
+---
+
+## Editor Support
+
+Install the **GIST Language** extension for VS Code for:
+
+- **Syntax highlighting** — keywords, types, strings, comments, HTTP methods
+- **Real-time diagnostics** — parse errors and semantic warnings as you type
+- **Autocomplete** — context-aware completions for keywords, types, kit constructs
+- **Hover documentation** — rich docs for models, intents, kit keywords, services
+- **Go to Definition** — Ctrl+click on a type name to jump to its declaration
+- **Find References** — see everywhere a type, model, or trait is used
+- **Rename Symbol** — rename a declaration and all its references
+- **Quick Fixes** — "Create model X" for undeclared type errors
+- **Document Formatting** — format on save using the GIST formatter
 
 ---
 
@@ -352,10 +432,11 @@ to send_message(channel_id, content) -> Message
 
 ## Next Steps
 
-- **Read the spec:** `GIST-spec-v0.7.md` — the full language reference
-- **Browse examples:** `examples/` — todo app, bookmark API, and more
-- **Build a kit:** `GIST-kit-authoring.md` — create your own domain extension
-- **Use the interpreter:** `GIST-interpreter.md` — the system prompt for LLM code generation
+- **Read the spec:** [GIST-spec-v0.7.md](../spec/GIST-spec-v0.7.md) — the full language reference
+- **Browse examples:** [examples/](../examples/) — todo app, bookmark API, deployer CLI
+- **Build a kit:** [GIST-kit-authoring.md](GIST-kit-authoring.md) — create your own domain extension
+- **Use the interpreter:** [GIST-interpreter.md](../spec/GIST-interpreter.md) — the system prompt for LLM code generation
+- **CLI reference:** [@gist-lang/cli](../packages/gist-cli/README.md) — full command documentation
 
 ---
 

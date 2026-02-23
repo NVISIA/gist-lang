@@ -17,6 +17,9 @@ importers:
 
   packages/gist-cli:
     dependencies:
+      '@clack/prompts':
+        specifier: ^1.0.1
+        version: 1.0.1
       '@gist-lang/formatter':
         specifier: workspace:*
         version: link:../gist-formatter
@@ -98,6 +101,12 @@ importers:
         version: 20.19.33
 
 packages:
+
+  '@clack/core@1.0.1':
+    resolution: {integrity: sha512-WKeyK3NOBwDOzagPR5H08rFk9D/WuN705yEbuZvKqlkmoLM2woKtXb10OO2k1NoSU4SFG947i2/SCYh+2u5e4g==}
+
+  '@clack/prompts@1.0.1':
+    resolution: {integrity: sha512-/42G73JkuYdyWZ6m8d/CJtBrGl1Hegyc7Fy78m5Ob+jF85TOUmLR5XLce/U3LxYAw0kJ8CT5aI99RIvPHcGp/Q==}
 
   '@esbuild/aix-ppc64@0.24.2':
     resolution: {integrity: sha512-thpVCb/rhxE/BnMLQ7GReQLLN8q9qbHmI55F4489/ByVg2aQaQ6kbcLb6FHkocZzQhxc4gx0sCk0tJkKBFzDhA==}
@@ -725,6 +734,9 @@ packages:
   siginfo@2.0.0:
     resolution: {integrity: sha512-ybx0WO1/8bSBLEWXZvEd7gMW3Sn3JFlW3TvX1nREbDLRNQNaeNN8WK0meBwPdAaOI7TtRRRJn/Es1zhrrCHu7g==}
 
+  sisteransi@1.0.5:
+    resolution: {integrity: sha512-bLGGlR1QxBcynn2d5YmDX4MGjlZvy2MRBDRNHLJ8VI6l6+9FUiyTFNJ0IveOSP0bcXgVDPRcfGqA0pjaqUpfVg==}
+
   source-map-js@1.2.1:
     resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
     engines: {node: '>=0.10.0'}
@@ -868,6 +880,17 @@ packages:
     hasBin: true
 
 snapshots:
+
+  '@clack/core@1.0.1':
+    dependencies:
+      picocolors: 1.1.1
+      sisteransi: 1.0.5
+
+  '@clack/prompts@1.0.1':
+    dependencies:
+      '@clack/core': 1.0.1
+      picocolors: 1.1.1
+      sisteransi: 1.0.5
 
   '@esbuild/aix-ppc64@0.24.2':
     optional: true
@@ -1328,6 +1351,8 @@ snapshots:
   semver@7.7.4: {}
 
   siginfo@2.0.0: {}
+
+  sisteransi@1.0.5: {}
 
   source-map-js@1.2.1: {}
 

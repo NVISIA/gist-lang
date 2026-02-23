@@ -1,6 +1,6 @@
 # @gist-lang/lsp
 
-Language Server Protocol (LSP) implementation for the [GIST language](../../README.md). Provides real-time diagnostics, context-aware completions, hover documentation, and semantic token highlighting for `.gist` files.
+Language Server Protocol (LSP) implementation for the [GIST language](../../README.md). Provides real-time diagnostics, context-aware completions, hover documentation, go-to-definition, find-references, rename, code actions, document formatting, and semantic token highlighting for `.gist` files.
 
 ## Features
 
@@ -50,6 +50,33 @@ Rich documentation on hover for:
 - **Type aliases**: base type
 - **Constants**: value
 
+### Go to Definition
+
+Ctrl+click (or F12) on a type name, model, enum, trait, error, or type alias to jump to its declaration.
+
+### Find References
+
+Right-click > Find All References on any declaration to see everywhere it's used — in field types, return types, parameters, `saves:`, `needs:`, `uses:`, spreads, and state machine `for:` clauses.
+
+### Rename
+
+Rename a model, enum, trait, type alias, or error and update all references across the document. The server validates naming conventions (PascalCase for types, snake_case for identifiers) before applying.
+
+### Code Actions (Quick Fixes)
+
+- **Undeclared type** → "Create model X", "Create enum X", "Create error X"
+- **Undeclared trait** → "Create trait X"
+
+Quick fixes insert a scaffolded declaration at the end of the document.
+
+### Workspace Symbols
+
+Open the symbol picker (Ctrl+T / Cmd+T) to search all declarations across the workspace — models, enums, traits, modules, intents, state machines, and more. Symbols are displayed with module-qualified names (e.g., `auth.login`).
+
+### Document Formatting
+
+Format on save or manual format (Shift+Alt+F) using the `@gist-lang/formatter`. Normalizes indentation, spacing around operators, blank lines, and trailing whitespace.
+
 ### Semantic Tokens
 
 Supplements the static TextMate grammar with dynamic highlighting:
@@ -65,21 +92,22 @@ Supplements the static TextMate grammar with dynamic highlighting:
 src/
   server.ts                    # LSP entry point, capability registration, request handlers
   index.ts                     # Entry point (imports server.ts)
-  workspace/
-    project-discovery.ts       # Find gist.yaml, .gist files, kit directories
-    gist-yaml-parser.ts        # Parse gist.yaml → typed GistProjectConfig
-    kit-loader.ts              # Parse kit.yaml → LoadedKit structures
-    kit-registry.ts            # Merge loaded kits into unified keyword/construct registry
-    types.ts                   # Workspace type definitions (GistProjectConfig, LoadedKit, etc.)
-  analysis/
-    symbol-table.ts            # Collect all declarations from AST into indexed lookup
-    validators.ts              # Semantic validation rules (duplicates, types, purity, etc.)
   features/
-    diagnostics.ts             # Bridge AST → SymbolTable → validators → LSP diagnostics
+    diagnostics.ts             # Bridge AST -> SymbolTable -> validators -> LSP diagnostics
     completion.ts              # Context-aware autocomplete
     hover.ts                   # Hover documentation
     semantic-tokens.ts         # Dynamic semantic token highlighting
+    definition.ts              # Go-to-definition
+    references.ts              # Find-all-references
+    rename.ts                  # Rename symbol (prepare + compute edits)
+    code-actions.ts            # Quick fixes for undeclared types/traits
+    workspace-symbols.ts       # Workspace symbol search
 ```
+
+The LSP depends on shared packages:
+- `@gist-lang/parser` — tokenization, parsing, AST
+- `@gist-lang/workspace` — project discovery, kit loading, symbol table, semantic analysis
+- `@gist-lang/formatter` — document formatting
 
 ### Parse Pipeline
 
@@ -88,8 +116,8 @@ On every document change, the server runs the full pipeline:
 1. **Lex** — tokenize source with kit keywords from the registry
 2. **Parse** — produce CST from tokens
 3. **AST** — transform CST to typed AST
-4. **Semantic analysis** — build symbol table, run validators, produce diagnostics
-5. **Cache** — store AST and symbol table for completion/hover requests
+4. **Semantic analysis** — build symbol table (with reference tracking), run validators, produce diagnostics
+5. **Cache** — store AST and symbol table for completion/hover/definition/references requests
 
 ### Workspace Discovery
 
@@ -108,3 +136,9 @@ The server communicates over the LSP protocol and registers these capabilities:
 - `completionProvider` (trigger characters: `:`, `.`, ` `)
 - `hoverProvider`
 - `semanticTokensProvider` (full document)
+- `definitionProvider`
+- `referencesProvider`
+- `renameProvider` (with prepare support)
+- `codeActionProvider` (quick fixes)
+- `workspaceSymbolProvider`
+- `documentFormattingProvider`

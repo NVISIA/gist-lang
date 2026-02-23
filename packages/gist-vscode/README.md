@@ -6,8 +6,14 @@ VS Code extension providing language support for [GIST](../../README.md) (`.gist
 
 - **Syntax highlighting** — TextMate grammar for keywords, types, strings, comments, modifiers, HTTP methods, and context lines
 - **Diagnostics** — real-time parse and semantic errors/warnings
-- **Autocomplete** — context-aware completions with snippet insertion
+- **Autocomplete** — context-aware completions with snippet insertion across 16 contexts
 - **Hover** — documentation for models, modules, intents, kit constructs, services, and more
+- **Go to Definition** — Ctrl+click on type names to jump to declarations
+- **Find References** — see all usages of a model, enum, trait, or type alias
+- **Rename** — rename a declaration and update all references
+- **Code Actions** — quick fixes for undeclared types ("Create model X")
+- **Document Formatting** — format on save with consistent indentation and spacing
+- **Workspace Symbols** — Ctrl+T to search all declarations across files
 - **Semantic tokens** — dynamic highlighting for kit keywords and function declarations
 - **File watching** — automatic re-validation on changes to `.gist`, `gist.yaml`, and `kit.yaml` files
 
@@ -24,7 +30,7 @@ From the monorepo root:
 
 ```bash
 pnpm install
-pnpm build            # builds all packages (parser → lsp → vscode)
+pnpm build            # builds all packages (parser -> workspace -> formatter -> lsp -> vscode)
 ```
 
 Or build just this extension:
@@ -42,7 +48,7 @@ pnpm --filter gist-lang build
 ### Run Tests
 
 ```bash
-pnpm test             # runs all tests across the monorepo (182 tests)
+pnpm test             # runs all tests across the monorepo
 ```
 
 ## Architecture
@@ -56,7 +62,7 @@ language-configuration.json     # Brackets, comments, indentation rules
 package.json                    # Extension manifest (language registration, grammar)
 ```
 
-The extension itself is thin — it activates the `@gist-lang/lsp` server over IPC and registers the `.gist` language with VS Code. All intelligence (diagnostics, completions, hover, semantic tokens) comes from the LSP server.
+The extension itself is thin — it activates the `@gist-lang/lsp` server over IPC and registers the `.gist` language with VS Code. All intelligence (diagnostics, completions, hover, definition, references, rename, code actions, formatting, workspace symbols, semantic tokens) comes from the LSP server.
 
 ### TextMate Scopes
 

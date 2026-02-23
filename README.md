@@ -44,9 +44,49 @@ Feed this to an LLM with the spec and interpreter instructions, and it generates
 
 ---
 
-## Getting Started
+## Quick Start
 
-Read the [Getting Started Guide](docs/GIST-getting-started.md) for a 5-minute walkthrough.
+```bash
+# Install the CLI
+npm install -g @gist-lang/cli
+
+# Scaffold a new project with AI agent integration
+gist init my-app --language typescript --agent claude-code
+
+# Write your specs, then validate
+gist check
+
+# Format your .gist files
+gist fmt --write
+
+# Generate code via your AI agent's slash command
+# /gist.generate
+```
+
+Read the [Getting Started Guide](docs/GIST-getting-started.md) for a full walkthrough.
+
+---
+
+## CLI
+
+The `gist` CLI is the primary interface for working with GIST projects.
+
+| Command | Description |
+|---------|-------------|
+| `gist init [name]` | Scaffold a new project (gist.yaml + starter .gist file) |
+| `gist check [files...]` | Validate .gist files for syntax and semantic errors |
+| `gist fmt [files...]` | Format .gist files (normalize indentation, spacing, blank lines) |
+| `gist kit list` | List available and installed kits |
+| `gist kit install <name>` | Install a kit into the project |
+| `gist kit create <name>` | Scaffold a new custom kit |
+| `gist kit validate [path]` | Validate a kit.yaml for correctness |
+| `gist skills install` | Install AI agent slash commands |
+| `gist skills list` | Show installed skills |
+| `gist bundle` | Assemble all project inputs into a single prompt |
+
+See the [CLI Reference](packages/gist-cli/README.md) for full documentation.
+
+---
 
 ## Documentation
 
@@ -58,6 +98,7 @@ Read the [Getting Started Guide](docs/GIST-getting-started.md) for a 5-minute wa
 | [Interpreter Instructions](spec/GIST-interpreter.md) | System prompt for LLM code generation |
 | [Getting Started](docs/GIST-getting-started.md) | Quick start guide |
 | [Kit Authoring](docs/GIST-kit-authoring.md) | How to create custom kits |
+| [CLI Reference](packages/gist-cli/README.md) | Full CLI command documentation |
 
 ## Built-in Kits
 
@@ -65,12 +106,14 @@ Kits extend GIST with domain-specific keywords. Each kit is a directory with `ki
 
 | Kit | Domain | Key Constructs |
 |-----|--------|----------------|
-| [iac](kits/iac/) | Infrastructure as Code | `resource`, `group`, `variable`, `output`, `data` |
-| [gamedev](kits/gamedev/) | Game Development | `scene`, `entity`, `component`, `system`, `input` |
-| [cli](kits/cli/) | Command-Line Apps | `command`, `arg`, `flag`, `prompt`, `output` |
-| [mobile](kits/mobile/) | Mobile Apps | `screen`, `nav`, `gesture`, `sheet`, `toast` |
 | [web](kits/web/) | Web Frontends | `page`, `component`, `layout`, `slot`, `client_state` |
 | [api](kits/api/) | API-First Design | `endpoint`, `version`, `paginate`, `rate_limit`, `middleware` |
+| [cli](kits/cli/) | Command-Line Apps | `command`, `arg`, `flag`, `prompt`, `output` |
+| [mobile](kits/mobile/) | Mobile Apps | `screen`, `nav`, `gesture`, `sheet`, `toast` |
+| [iac](kits/iac/) | Infrastructure as Code | `resource`, `group`, `variable`, `output`, `data` |
+| [gamedev](kits/gamedev/) | Game Development | `scene`, `entity`, `component`, `system`, `input` |
+
+Manage kits with the CLI: `gist kit list`, `gist kit install <name>`, `gist kit create <name>`.
 
 ## Examples
 
@@ -82,21 +125,42 @@ Kits extend GIST with domain-specific keywords. Each kit is a directory with `ki
 
 ## Tooling
 
-The `packages/` directory contains editor tooling for GIST, built as a pnpm monorepo:
+The `packages/` directory contains the GIST toolchain, built as a pnpm monorepo:
 
 | Package | Description |
 |---------|-------------|
+| [@gist-lang/cli](packages/gist-cli/) | CLI for validating, formatting, scaffolding, and managing GIST projects |
 | [@gist-lang/parser](packages/gist-parser/) | Standalone lexer, parser, and AST for `.gist` files |
-| [@gist-lang/lsp](packages/gist-lsp/) | Language Server with diagnostics, completions, hover, and semantic tokens |
+| [@gist-lang/workspace](packages/gist-workspace/) | Workspace discovery, kit loading, symbol table, and semantic analysis |
+| [@gist-lang/formatter](packages/gist-formatter/) | Code formatter for `.gist` files |
+| [@gist-lang/lsp](packages/gist-lsp/) | Language Server with diagnostics, completions, hover, go-to-definition, rename, and more |
 | [gist-lang](packages/gist-vscode/) | VS Code extension providing full GIST language support |
 
 ## How It Works
 
-1. Write a `gist.yaml` (infrastructure) and `.gist` files (behavior)
-2. Feed them to an LLM with the [interpreter instructions](spec/GIST-interpreter.md)
-3. The LLM generates a complete, buildable project
+1. **Write** a `gist.yaml` (infrastructure) and `.gist` files (behavior)
+2. **Validate** with `gist check --checklist` (syntax + spec quality)
+3. **Generate** via AI agent slash commands (`/gist.generate`) or `gist bundle` for manual LLM prompting
 
 GIST is **paradigm-agnostic** — the core spec handles models, types, intents, events, state machines, and testing. Kits add domain-specific constructs. Anyone can [create a kit](docs/GIST-kit-authoring.md).
+
+### AI Agent Integration
+
+GIST integrates with AI coding agents through **slash command skills**:
+
+```bash
+gist skills install --agent claude-code   # or cursor, copilot, windsurf, gemini
+```
+
+This installs markdown instruction files that teach your AI agent the GIST workflow:
+
+| Slash Command | Purpose |
+|---------------|---------|
+| `/gist.generate` | Parse specs, generate production code following the GIST interpreter pipeline |
+| `/gist.validate` | Run spec quality checks and suggest improvements |
+| `/gist.plan` | Analyze specs and produce an implementation plan |
+| `/gist.analyze` | Cross-artifact consistency check |
+| `/gist.checklist` | AI-assisted spec quality review |
 
 ## Core Beliefs
 
@@ -111,17 +175,24 @@ GIST is **paradigm-agnostic** — the core spec handles models, types, intents, 
 
 ```
 gist-lang/
-  packages/                      # editor tooling (pnpm monorepo)
+  packages/                      # toolchain (pnpm monorepo)
+    gist-cli/                     # CLI tool
+      src/commands/                # init, check, fmt, kit, skills, bundle
+      src/agents/                  # agent skill registrar (6 agents)
+      src/kit/                     # kit validator and scaffolder
+      src/analysis/                # spec quality checklists
+      src/bundler/                 # prompt assembler
     gist-parser/                  # standalone parser library
       src/lexer/                   # tokenizer with INDENT/DEDENT
       src/parser/                  # recursive descent parser → CST
       src/ast/                     # CST → typed AST transformation
-    gist-lsp/                     # Language Server Protocol server
-      src/workspace/               # project discovery, kit loading
+    gist-workspace/               # shared workspace logic
       src/analysis/                # symbol table, semantic validators
-      src/features/                # diagnostics, completion, hover, semantic tokens
+    gist-formatter/               # code formatter
+    gist-lsp/                     # Language Server Protocol server
+      src/features/                # diagnostics, completion, hover, definition,
+                                   # references, rename, code-actions, formatting
     gist-vscode/                  # VS Code extension
-      src/extension.ts             # LSP client activation
       syntaxes/                    # TextMate grammar
   spec/                          # language specification
     GIST-spec-v0.7.md             # core spec
@@ -131,6 +202,7 @@ gist-lang/
   docs/                          # guides
     GIST-getting-started.md       # quick start
     GIST-kit-authoring.md         # kit creation guide
+  templates/commands/             # slash command templates for AI agents
   kits/                          # built-in domain kits
     api/  cli/  gamedev/  iac/  mobile/  web/
   examples/                      # example projects
@@ -141,8 +213,8 @@ gist-lang/
 
 ```bash
 pnpm install          # install dependencies
-pnpm build            # build all packages (parser → lsp → vscode)
-pnpm test             # run all 182 tests across 6 test files
+pnpm build            # build all packages (parser -> workspace -> formatter -> lsp + cli)
+pnpm test             # run all tests
 ```
 
 Requires Node.js 18+ and pnpm.

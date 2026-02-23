@@ -16,7 +16,8 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(export PATH=\"/f/Development/nodejs:$PATH\")",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(ls:*)"
     ]
   }
 }
