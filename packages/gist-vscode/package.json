@@ -13,6 +13,13 @@
     "onLanguage:gist"
   ],
   "main": "./dist/extension.js",
+  "files": [
+    "dist",
+    "syntaxes",
+    "language-configuration.json",
+    "README.md",
+    "LICENSE"
+  ],
   "contributes": {
     "languages": [
       {
@@ -30,6 +37,13 @@
       }
     ]
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gist-lang/gist-lang.git",
+    "directory": "packages/gist-vscode"
+  },
+  "homepage": "https://github.com/gist-lang/gist-lang/tree/main/packages/gist-vscode",
+  "bugs": "https://github.com/gist-lang/gist-lang/issues",
   "dependencies": {
     "vscode-languageclient": "^9.0.0"
   },

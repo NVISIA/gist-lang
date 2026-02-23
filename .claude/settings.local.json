@@ -17,7 +17,12 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(export PATH=\"/f/Development/nodejs:$PATH\")",
       "Bash(node:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(for pkg in gist-cli gist-formatter gist-lsp gist-parser gist-workspace)",
+      "Bash(do echo \"=== $pkg ===\")",
+      "Bash(test:*)",
+      "Bash(done)"
     ]
   }
 }

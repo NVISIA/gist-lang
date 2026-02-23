@@ -4,6 +4,17 @@
   "description": "Language Server Protocol server for GIST",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch"
@@ -18,5 +29,12 @@
   "devDependencies": {
     "@types/node": "^20.0.0"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gist-lang/gist-lang.git",
+    "directory": "packages/gist-lsp"
+  },
+  "homepage": "https://github.com/gist-lang/gist-lang/tree/main/packages/gist-lsp",
+  "bugs": "https://github.com/gist-lang/gist-lang/issues",
   "license": "MIT"
 }

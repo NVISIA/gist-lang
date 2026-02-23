@@ -1,0 +1,85 @@
+kit: mobile
+version: 1.0.0
+author: gist-core
+description: Mobile app constructs — screens, navigation, gestures, offline storage, and push notifications
+license: MIT
+
+yaml_sections:
+  app:
+    description: Mobile app configuration
+    fields:
+      name: { type: string, required: true }
+      bundle_id: { type: string }
+      platforms: { type: array, values: [ios, android, web] }
+      min_ios: { type: string }
+      min_android: { type: integer }
+  navigation:
+    description: Navigation structure
+    fields:
+      type: { type: string, values: [stack, tabs, drawer, bottom_tabs] }
+      initial_screen: { type: string }
+  offline:
+    description: Offline storage and sync
+    fields:
+      storage: { type: string, values: [sqlite, realm, async_storage, hive] }
+      sync_strategy: { type: string, values: [optimistic, pessimistic, manual] }
+  push:
+    description: Push notification configuration
+    fields:
+      provider: { type: string, values: [fcm, apns, onesignal, expo] }
+      token_env: { type: string }
+
+keywords:
+  - screen
+  - nav
+  - gesture
+  - sheet
+  - toast
+  - local_store
+
+extends:
+  - state        # screen lifecycle, auth state, connectivity state
+  - on           # app events (foreground, background, push received)
+  - fn           # pure transforms for UI data
+  - rules        # theme values, breakpoints, platform overrides
+  - always       # UX invariants (loading indicators, error handling)
+  - ephemeral    # transient UI state (modals, toasts, selections)
+
+constructs:
+  screen:
+    kind: declaration
+    name_style: PascalCase
+    doc: A full-screen view in the app (maps to a screen/page/route)
+    fields:
+      nav: { type: identifier, doc: Navigation bar style, values: [default, large, hidden, custom] }
+      tab: { type: literal, doc: Tab bar association }
+      auth: { type: boolean, doc: Requires authentication }
+      pull_to_refresh: { type: boolean }
+    supports: [context_line, always]
+    snippet: |
+      screen ${1:Name}
+        > ${2:description}
+        nav: default
+        ${0}
+  nav:
+    kind: declaration
+    name_style: identifier
+    doc: Navigation action (push, pop, replace, reset, switch tab)
+    snippet: |
+      nav ${1:push} ${2:ScreenName}
+  gesture:
+    kind: declaration
+    name_style: none
+    doc: Touch gesture handler (tap, long_press, swipe, pinch, pan)
+  sheet:
+    kind: inline
+    name_style: none
+    doc: Bottom sheet or modal presentation
+  toast:
+    kind: inline
+    name_style: none
+    doc: Temporary notification message
+  local_store:
+    kind: inline
+    name_style: none
+    doc: Read/write to device-local storage

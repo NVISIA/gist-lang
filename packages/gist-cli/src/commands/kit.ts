@@ -11,6 +11,7 @@ import type { LoadedKit } from '@gist-lang/workspace';
 import { validateKit } from '../kit/validator.js';
 import type { KitValidationResult } from '../kit/validator.js';
 import { scaffoldKit } from '../kit/scaffolder.js';
+import { listBuiltinKitDirs, findBuiltinKit } from '../kit/builtins.js';
 
 export function registerKitCommand(program: Command): void {
   const kit = program
@@ -61,7 +62,17 @@ export function registerKitCommand(program: Command): void {
 function runKitList(opts: { json?: boolean }): void {
   const rootDir = process.cwd();
   const workspace = discoverWorkspace(rootDir);
-  const kits = loadAllKits(workspace.kitDirs);
+
+  // Merge workspace-discovered kits with built-in kits from the CLI package.
+  // Workspace kits take priority; built-in kits fill in any gaps.
+  const workspaceKits = loadAllKits(workspace.kitDirs);
+  const workspaceKitNames = new Set(workspaceKits.map(k => k.name));
+
+  const builtinDirs = listBuiltinKitDirs();
+  const builtinKits = loadAllKits(builtinDirs)
+    .filter(k => !workspaceKitNames.has(k.name));
+
+  const kits = [...workspaceKits, ...builtinKits];
 
   if (opts.json) {
     const output = kits.map(kit => ({
@@ -121,13 +132,21 @@ function runKitInstall(source: string): number {
   if (fs.existsSync(path.join(absoluteSource, 'kit.yaml'))) {
     sourceDir = absoluteSource;
   } else {
-    // Look for built-in kit by name
+    // Look for kit by name in workspace-discovered kits
     const workspace = discoverWorkspace(rootDir);
     for (const kitDir of workspace.kitDirs) {
       const kit = loadKit(kitDir);
       if (kit?.name === source) {
         sourceDir = kitDir;
         break;
+      }
+    }
+
+    // Fall back to built-in kits bundled with the CLI package
+    if (!sourceDir) {
+      const builtinDir = findBuiltinKit(source);
+      if (builtinDir) {
+        sourceDir = builtinDir;
       }
     }
   }

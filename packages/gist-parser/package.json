@@ -1,12 +1,30 @@
 {
   "name": "@gist-lang/parser",
   "version": "0.1.0",
-  "description": "Parser for the GIST language",
+  "description": "Parser for the GIST specification language",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gist-lang/gist-lang.git",
+    "directory": "packages/gist-parser"
+  },
+  "homepage": "https://github.com/gist-lang/gist-lang/tree/main/packages/gist-parser",
+  "bugs": "https://github.com/gist-lang/gist-lang/issues",
   "license": "MIT"
 }

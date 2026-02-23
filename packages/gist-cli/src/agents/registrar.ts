@@ -4,26 +4,40 @@ import type { AgentConfig, AgentId, InstallResult } from './types.js';
 import { getAgentConfig } from './configs.js';
 
 /**
+ * Resolve the CLI package root directory.
+ * Works both in monorepo dev (dist/agents/ -> package root) and when npm-installed.
+ */
+function getPackageRoot(): string {
+  // __dirname is dist/agents/ at runtime — go up 2 levels to reach package root
+  return path.resolve(__dirname, '..', '..');
+}
+
+/**
  * The directory where template command files live.
- * Resolved relative to the CLI package root.
+ * Checks the package-local templates/ first (works when npm-installed),
+ * then falls back to walking up the directory tree (works in monorepo dev).
  */
 function getTemplatesDir(): string {
-  // Walk up from dist/agents/ to find the monorepo root, then templates/commands/
-  // In production: packages/gist-cli/dist/agents/registrar.js
-  // Template dir: templates/commands/
-  let dir = __dirname;
-  // Walk up until we find templates/commands/ or hit the filesystem root
-  for (let i = 0; i < 10; i++) {
+  // 1. Check package-local templates (primary — works when npm-installed)
+  const packageLocal = path.join(getPackageRoot(), 'templates', 'commands');
+  if (fs.existsSync(packageLocal)) {
+    return packageLocal;
+  }
+
+  // 2. Walk up from package root to find monorepo-level templates/
+  let dir = getPackageRoot();
+  for (let i = 0; i < 5; i++) {
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
     const candidate = path.join(dir, 'templates', 'commands');
     if (fs.existsSync(candidate)) {
       return candidate;
     }
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
   }
-  // Fallback: relative to package
-  return path.resolve(__dirname, '../../../../templates/commands');
+
+  // Fallback: return the package-local path (will trigger "not found" error)
+  return packageLocal;
 }
 
 /**

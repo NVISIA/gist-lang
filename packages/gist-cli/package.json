@@ -7,6 +7,13 @@
   "bin": {
     "gist": "dist/bin.js"
   },
+  "files": [
+    "dist",
+    "templates",
+    "kits",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch"
@@ -21,5 +28,12 @@
   "devDependencies": {
     "@types/node": "^20.0.0"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gist-lang/gist-lang.git",
+    "directory": "packages/gist-cli"
+  },
+  "homepage": "https://github.com/gist-lang/gist-lang/tree/main/packages/gist-cli",
+  "bugs": "https://github.com/gist-lang/gist-lang/issues",
   "license": "MIT"
 }

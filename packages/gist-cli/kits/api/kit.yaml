@@ -1,0 +1,105 @@
+kit: api
+version: 1.0.0
+author: gist-core
+description: API-first design constructs — endpoints, versioning, pagination, rate limits, schemas, and SDK generation
+license: MIT
+
+yaml_sections:
+  api_product:
+    description: API-as-product configuration
+    fields:
+      name: { type: string, required: true }
+      base_url: { type: string }
+      versioning: { type: string, values: [url, header, query], default: url }
+      current_version: { type: string }
+      deprecation_policy: { type: string }
+  schema:
+    description: API schema generation
+    fields:
+      type: { type: string, values: [openapi, graphql, grpc, asyncapi] }
+      output: { type: string }
+      servers: { type: array }
+  sdk:
+    description: Client SDK generation
+    fields:
+      languages: { type: array }
+      output_dir: { type: string }
+      package_name: { type: string }
+  gateway:
+    description: API gateway configuration
+    fields:
+      type: { type: string, values: [kong, aws_api_gateway, cloudflare, nginx, custom] }
+      auth_header: { type: string, default: Authorization }
+      cors: { type: object }
+
+keywords:
+  - endpoint
+  - version
+  - paginate
+  - rate_limit
+  - middleware
+  - schema
+
+extends:
+  - to           # endpoints build on intents
+  - fn           # pure transforms for request/response mapping
+  - rules        # rate limit tiers, pagination defaults, version config
+  - always       # API-wide constraints (auth, headers, CORS)
+  - guard        # authentication and authorization
+
+constructs:
+  endpoint:
+    kind: declaration
+    name_style: identifier
+    doc: An API endpoint with full HTTP semantics, versioning, and documentation
+    fields:
+      method: { type: identifier, values: [GET, POST, PUT, PATCH, DELETE] }
+      path: { type: literal, doc: URL path pattern }
+      version: { type: literal, doc: API version this endpoint belongs to }
+      deprecated: { type: literal, doc: Deprecation notice with sunset date }
+      tags: { type: list, doc: OpenAPI tags for grouping }
+      rate_limit: { type: literal, doc: Override default rate limit }
+      cache: { type: literal, doc: HTTP cache-control directive }
+    supports: [must, context_line, code]
+    snippet: |
+      endpoint ${1:name}
+        ${2:GET} ${3:/resource}
+        ${0}
+  version:
+    kind: declaration
+    name_style: identifier
+    doc: An API version boundary with migration rules
+    supports: [context_line]
+    snippet: |
+      version ${1:v2}
+        > ${2:description}
+        ${0}
+  paginate:
+    kind: inline
+    name_style: none
+    doc: Declares pagination strategy for a list endpoint
+  rate_limit:
+    kind: declaration
+    name_style: identifier
+    doc: Named rate limit tier applied to endpoints
+    fields:
+      requests: { type: literal, doc: "Requests per window (e.g., 100/minute)" }
+      burst: { type: literal, doc: Burst allowance }
+      scope: { type: identifier, values: [ip, user, api_key, global] }
+    snippet: |
+      rate_limit ${1:name}
+        requests: ${2:100/minute}
+        scope: ${3:user}
+  middleware:
+    kind: declaration
+    name_style: identifier
+    doc: Reusable request/response processing step
+    supports: [context_line, code]
+    snippet: |
+      middleware ${1:name}
+        > ${2:description}
+        ${0}
+  schema:
+    kind: inline
+    name_style: none
+    doc: Inline schema annotation for request/response documentation

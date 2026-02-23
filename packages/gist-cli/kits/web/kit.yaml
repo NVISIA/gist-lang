@@ -1,0 +1,93 @@
+kit: web
+version: 1.0.0
+author: gist-core
+description: Web frontend constructs — pages, components, layouts, routing, and client-side state
+license: MIT
+
+yaml_sections:
+  web:
+    description: Web app configuration
+    fields:
+      type: { type: string, values: [spa, ssr, ssg, hybrid], default: spa }
+      base_url: { type: string }
+      meta:
+        type: object
+        fields:
+          title: { type: string }
+          description: { type: string }
+          og_image: { type: string }
+  styling:
+    description: Styling approach
+    fields:
+      type: { type: string, values: [tailwind, css_modules, styled_components, emotion, vanilla] }
+      theme_file: { type: string }
+  bundler:
+    description: Build tool configuration
+    fields:
+      type: { type: string, values: [vite, webpack, turbopack, esbuild] }
+      output_dir: { type: string, default: dist }
+
+keywords:
+  - page
+  - component
+  - layout
+  - route
+  - slot
+  - client_state
+
+extends:
+  - state        # UI state machines (forms, wizards, auth flows)
+  - on           # DOM events, lifecycle hooks
+  - fn           # pure transforms for UI data
+  - rules        # theme tokens, breakpoints, feature flags
+  - always       # UX invariants
+  - ephemeral    # transient UI state (modals, tooltips, notifications)
+
+constructs:
+  page:
+    kind: declaration
+    name_style: PascalCase
+    doc: A routable page/view in the web app
+    fields:
+      route: { type: literal, doc: URL path pattern }
+      layout: { type: type_name, doc: Wrapping layout component }
+      auth: { type: boolean, doc: Requires authentication }
+      ssr: { type: boolean, doc: Server-side rendered }
+      title: { type: literal, doc: Page title for <head> }
+    supports: [context_line, always]
+    snippet: |
+      page ${1:Name}
+        route: "/${2:path}"
+        ${0}
+  component:
+    kind: declaration
+    name_style: PascalCase
+    doc: A reusable UI component with props, state, and rendering
+    fields:
+      props: { type: object, doc: Component input properties }
+    supports: [context_line, always]
+    snippet: |
+      component ${1:Name}
+        props: { ${2:name}: ${3:type} }
+        ${0}
+  layout:
+    kind: declaration
+    name_style: PascalCase
+    doc: A wrapper that provides shared structure (header, sidebar, footer)
+    supports: [context_line]
+    snippet: |
+      layout ${1:Name}
+        ${0}
+        slot content
+  route:
+    kind: declaration
+    name_style: none
+    doc: Route configuration with guards and redirects
+  slot:
+    kind: inline
+    name_style: identifier
+    doc: Named insertion point in a layout where child content renders
+  client_state:
+    kind: declaration
+    name_style: identifier
+    doc: Client-side reactive state (maps to store, context, signal, or atom)
