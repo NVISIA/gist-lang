@@ -17,6 +17,9 @@ importers:
 
   packages/gist-cli:
     dependencies:
+      '@gist-lang/formatter':
+        specifier: workspace:*
+        version: link:../gist-formatter
       '@gist-lang/parser':
         specifier: workspace:*
         version: link:../gist-parser
@@ -31,8 +34,21 @@ importers:
         specifier: ^20.0.0
         version: 20.19.33
 
+  packages/gist-formatter:
+    dependencies:
+      '@gist-lang/parser':
+        specifier: workspace:*
+        version: link:../gist-parser
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.33
+
   packages/gist-lsp:
     dependencies:
+      '@gist-lang/formatter':
+        specifier: workspace:*
+        version: link:../gist-formatter
       '@gist-lang/parser':
         specifier: workspace:*
         version: link:../gist-parser

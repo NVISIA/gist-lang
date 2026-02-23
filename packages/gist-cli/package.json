@@ -14,6 +14,7 @@
   "dependencies": {
     "@gist-lang/parser": "workspace:*",
     "@gist-lang/workspace": "workspace:*",
+    "@gist-lang/formatter": "workspace:*",
     "commander": "^13.0.0"
   },
   "devDependencies": {

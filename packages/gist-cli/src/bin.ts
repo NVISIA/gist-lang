@@ -4,6 +4,8 @@ import { registerCheckCommand } from './commands/check.js';
 import { registerInitCommand } from './commands/init.js';
 import { registerSkillsCommand } from './commands/skills.js';
 import { registerBundleCommand } from './commands/bundle.js';
+import { registerFmtCommand } from './commands/fmt.js';
+import { registerKitCommand } from './commands/kit.js';
 
 const program = new Command();
 
@@ -16,5 +18,7 @@ registerCheckCommand(program);
 registerInitCommand(program);
 registerSkillsCommand(program);
 registerBundleCommand(program);
+registerFmtCommand(program);
+registerKitCommand(program);
 
 program.parse();

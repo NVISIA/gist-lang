@@ -23,6 +23,7 @@ import { computeReferences } from './features/references.js';
 import { prepareRename, computeRename } from './features/rename.js';
 import { computeCodeActions } from './features/code-actions.js';
 import { computeWorkspaceSymbols } from './features/workspace-symbols.js';
+import { format } from '@gist-lang/formatter';
 import type { SymbolTable } from '@gist-lang/workspace';
 
 const connection = createConnection(ProposedFeatures.all);
@@ -71,6 +72,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
         codeActionKinds: ['quickfix'],
       },
       workspaceSymbolProvider: true,
+      documentFormattingProvider: true,
     },
   };
 });
@@ -265,6 +267,32 @@ connection.onCodeAction((params) => {
 
 connection.onWorkspaceSymbol((params) => {
   return computeWorkspaceSymbols(params.query, symbolCache);
+});
+
+// ─── Document Formatting ─────────────────────────────────
+
+connection.onDocumentFormatting((params) => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return [];
+
+  const source = document.getText();
+  const formatted = format(source, {
+    indentWidth: params.options.tabSize ?? 2,
+  });
+
+  // If nothing changed, return no edits
+  if (source === formatted) return [];
+
+  // Replace the entire document
+  const lastLine = document.lineCount - 1;
+  const lastChar = document.getText().length;
+  return [{
+    range: {
+      start: { line: 0, character: 0 },
+      end: document.positionAt(lastChar),
+    },
+    newText: formatted,
+  }];
 });
 
 documents.listen(connection);
