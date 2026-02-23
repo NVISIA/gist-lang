@@ -11,7 +11,12 @@
       "Bash(npx vitest run:*)",
       "Bash(node -e:*)",
       "Bash(GIST_DEBUG_LEXER=1 npx vitest:*)",
-      "Bash(pnpm ls:*)"
+      "Bash(pnpm ls:*)",
+      "Bash(grep:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(export PATH=\"/f/Development/nodejs:$PATH\")",
+      "Bash(node:*)"
     ]
   }
 }

@@ -1,9 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as path from 'path';
-import { parseGistYamlContent } from '../src/workspace/gist-yaml-parser.js';
-import { parseKitYaml, loadKit } from '../src/workspace/kit-loader.js';
-import { KitRegistry } from '../src/workspace/kit-registry.js';
-import { discoverWorkspace } from '../src/workspace/project-discovery.js';
+import { parseGistYamlContent, parseKitYaml, loadKit, KitRegistry, discoverWorkspace } from '@gist-lang/workspace';
 
 // ─── gist-yaml-parser ─────────────────────────────────────────
 

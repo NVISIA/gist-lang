@@ -3,12 +3,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { lex, parse, cstToAst } from '@gist-lang/parser';
 import type { GistProgram } from '@gist-lang/parser';
-import { SymbolTable } from '../src/analysis/symbol-table.js';
-import { runAllValidators } from '../src/analysis/validators.js';
+import { SymbolTable, runAllValidators, KitRegistry, parseKitYaml, loadKit, parseGistYamlContent } from '@gist-lang/workspace';
 import { computeSemanticDiagnostics } from '../src/features/diagnostics.js';
-import { KitRegistry } from '../src/workspace/kit-registry.js';
-import { parseKitYaml, loadKit } from '../src/workspace/kit-loader.js';
-import { parseGistYamlContent } from '../src/workspace/gist-yaml-parser.js';
 
 const repoRoot = path.resolve(__dirname, '../../..');
 

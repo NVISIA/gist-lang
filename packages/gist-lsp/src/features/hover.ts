@@ -1,7 +1,7 @@
 import type { Hover, Position } from 'vscode-languageserver/node';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
-import type { SymbolTable } from '../analysis/symbol-table.js';
-import type { KitRegistry } from '../workspace/kit-registry.js';
+import type { SymbolTable } from '@gist-lang/workspace';
+import type { KitRegistry } from '@gist-lang/workspace';
 
 /**
  * Compute hover information for a word at the given position.

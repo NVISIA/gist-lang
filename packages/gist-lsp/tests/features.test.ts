@@ -3,11 +3,14 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { computeCompletions } from '../src/features/completion.js';
 import { computeHover } from '../src/features/hover.js';
 import { computeSemanticTokens, TOKEN_TYPES } from '../src/features/semantic-tokens.js';
-import { SymbolTable } from '../src/analysis/symbol-table.js';
-import { KitRegistry } from '../src/workspace/kit-registry.js';
-import { parseKitYaml } from '../src/workspace/kit-loader.js';
+import { computeDefinition } from '../src/features/definition.js';
+import { computeReferences } from '../src/features/references.js';
+import { prepareRename, computeRename } from '../src/features/rename.js';
+import { computeCodeActions } from '../src/features/code-actions.js';
+import { computeWorkspaceSymbols } from '../src/features/workspace-symbols.js';
+import { SymbolTable, KitRegistry, parseKitYaml } from '@gist-lang/workspace';
+import type { GistProjectConfig } from '@gist-lang/workspace';
 import { lex, parse, cstToAst } from '@gist-lang/parser';
-import type { GistProjectConfig } from '../src/workspace/types.js';
 
 // ─── Helpers ──────────────────────────────────────────────
 
@@ -411,5 +414,159 @@ describe('computeSemanticTokens', () => {
     const data = result.data;
     // First token should be TYPE_NAME "User" with type = 'type' (index 1)
     expect(data[3]).toBe(TOKEN_TYPES.indexOf('type'));
+  });
+});
+
+// ─── Definition Tests ────────────────────────────────────
+
+describe('computeDefinition', () => {
+  it('jumps to model declaration from a field type reference', () => {
+    const source = 'User = { name: string }\nOrder = { buyer: User }';
+    const symbols = parseToSymbols(source);
+    const doc = makeDoc(source);
+    // Hover on "User" in the Order model (line 1, around char 18)
+    const result = computeDefinition(doc, { line: 1, character: 18 }, symbols);
+    expect(result).not.toBeNull();
+    // Should point to line 0 where User is declared
+    expect(result!.range.start.line).toBe(0);
+  });
+
+  it('returns null for unknown words', () => {
+    const source = 'some random text';
+    const symbols = parseToSymbols(source);
+    const doc = makeDoc(source);
+    const result = computeDefinition(doc, { line: 0, character: 5 }, symbols);
+    expect(result).toBeNull();
+  });
+
+  it('jumps to module declaration', () => {
+    const source = 'module auth\n  to login()\n    do:\n      check';
+    const symbols = parseToSymbols(source);
+    const doc = makeDoc(source);
+    const result = computeDefinition(doc, { line: 0, character: 8 }, symbols);
+    expect(result).not.toBeNull();
+    expect(result!.range.start.line).toBe(0);
+  });
+});
+
+// ─── References Tests ────────────────────────────────────
+
+describe('computeReferences', () => {
+  it('finds references to a model used as field type', () => {
+    const source = 'User = { name: string }\nOrder = { buyer: User }';
+    const symbols = parseToSymbols(source);
+    const doc = makeDoc(source);
+    // Find references to "User" (from its declaration at line 0)
+    const refs = computeReferences(doc, { line: 0, character: 1 }, symbols, true);
+    // Should include at least the declaration + the type reference
+    expect(refs.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('returns empty for unknown words', () => {
+    const source = 'some text';
+    const symbols = parseToSymbols(source);
+    const doc = makeDoc(source);
+    const refs = computeReferences(doc, { line: 0, character: 5 }, symbols, true);
+    expect(refs).toHaveLength(0);
+  });
+});
+
+// ─── Rename Tests ────────────────────────────────────────
+
+describe('rename', () => {
+  it('prepareRename returns range for declared symbol', () => {
+    const source = 'User = { name: string }';
+    const symbols = parseToSymbols(source);
+    const doc = makeDoc(source);
+    const result = prepareRename(doc, { line: 0, character: 2 }, symbols);
+    expect(result).not.toBeNull();
+    expect(result!.placeholder).toBe('User');
+  });
+
+  it('prepareRename returns null for undeclared word', () => {
+    const source = 'some text';
+    const symbols = parseToSymbols(source);
+    const doc = makeDoc(source);
+    const result = prepareRename(doc, { line: 0, character: 1 }, symbols);
+    expect(result).toBeNull();
+  });
+
+  it('computeRename replaces all occurrences', () => {
+    const source = 'User = { name: string }\nOrder = { buyer: User }';
+    const symbols = parseToSymbols(source);
+    const doc = makeDoc(source);
+    const edit = computeRename(doc, { line: 0, character: 2 }, 'Account', symbols);
+    expect(edit).not.toBeNull();
+    const changes = edit!.changes![doc.uri];
+    // Should have at least 2 replacements (declaration + type usage)
+    expect(changes.length).toBeGreaterThanOrEqual(2);
+    for (const change of changes) {
+      expect(change.newText).toBe('Account');
+    }
+  });
+});
+
+// ─── Code Actions Tests ──────────────────────────────────
+
+describe('computeCodeActions', () => {
+  it('offers create model for undeclared type', () => {
+    const source = 'Order = { user: UnknownType }';
+    const symbols = parseToSymbols(source);
+    const doc = makeDoc(source);
+    const actions = computeCodeActions(doc, {
+      textDocument: { uri: doc.uri },
+      range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+      context: {
+        diagnostics: [{
+          range: { start: { line: 0, character: 16 }, end: { line: 0, character: 27 } },
+          message: "Undeclared type 'UnknownType'",
+        }],
+      },
+    }, symbols);
+
+    expect(actions.length).toBeGreaterThan(0);
+    const labels = actions.map(a => a.title);
+    expect(labels).toContain("Create model 'UnknownType'");
+    expect(labels).toContain("Create enum 'UnknownType'");
+    expect(labels).toContain("Create error 'UnknownType'");
+  });
+});
+
+// ─── Workspace Symbols Tests ─────────────────────────────
+
+describe('computeWorkspaceSymbols', () => {
+  it('returns symbols matching query', () => {
+    const source = 'User = { name: string }\nRole = admin | member\nmodule auth\n  to login()\n    do:\n      check';
+    const symbols = parseToSymbols(source);
+    const cache = new Map<string, SymbolTable>();
+    cache.set('file:///test.gist', symbols);
+
+    const results = computeWorkspaceSymbols('User', cache);
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].name).toBe('User');
+  });
+
+  it('returns all symbols for empty query', () => {
+    const source = 'User = { name: string }\nRole = admin | member';
+    const symbols = parseToSymbols(source);
+    const cache = new Map<string, SymbolTable>();
+    cache.set('file:///test.gist', symbols);
+
+    const results = computeWorkspaceSymbols('', cache);
+    const names = results.map(r => r.name);
+    expect(names).toContain('User');
+    expect(names).toContain('Role');
+  });
+
+  it('returns module-qualified names for intents', () => {
+    const source = 'module auth\n  to login()\n    do:\n      check';
+    const symbols = parseToSymbols(source);
+    const cache = new Map<string, SymbolTable>();
+    cache.set('file:///test.gist', symbols);
+
+    const results = computeWorkspaceSymbols('login', cache);
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].name).toBe('auth.login');
+    expect(results[0].containerName).toBe('auth');
   });
 });

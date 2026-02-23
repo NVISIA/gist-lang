@@ -1,8 +1,6 @@
 import type { GistProgram, Diagnostic } from '@gist-lang/parser';
-import type { GistProjectConfig } from '../workspace/types.js';
-import type { KitRegistry } from '../workspace/kit-registry.js';
-import { SymbolTable } from '../analysis/symbol-table.js';
-import { runAllValidators } from '../analysis/validators.js';
+import { SymbolTable, runAllValidators } from '@gist-lang/workspace';
+import type { GistProjectConfig, KitRegistry } from '@gist-lang/workspace';
 
 /**
  * Run semantic analysis on an AST and return diagnostics.

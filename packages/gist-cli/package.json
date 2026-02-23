@@ -1,9 +1,12 @@
 {
-  "name": "@gist-lang/lsp",
+  "name": "@gist-lang/cli",
   "version": "0.1.0",
-  "description": "Language Server Protocol server for GIST",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "description": "CLI for GIST — validate, scaffold, and bundle GIST projects",
+  "main": "dist/bin.js",
+  "types": "dist/bin.d.ts",
+  "bin": {
+    "gist": "dist/bin.js"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch"
@@ -11,8 +14,7 @@
   "dependencies": {
     "@gist-lang/parser": "workspace:*",
     "@gist-lang/workspace": "workspace:*",
-    "vscode-languageserver": "^9.0.0",
-    "vscode-languageserver-textdocument": "^1.0.0"
+    "commander": "^13.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0"

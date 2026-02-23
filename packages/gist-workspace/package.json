@@ -1,7 +1,7 @@
 {
-  "name": "@gist-lang/lsp",
+  "name": "@gist-lang/workspace",
   "version": "0.1.0",
-  "description": "Language Server Protocol server for GIST",
+  "description": "Workspace discovery and configuration for GIST projects",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -10,11 +10,10 @@
   },
   "dependencies": {
     "@gist-lang/parser": "workspace:*",
-    "@gist-lang/workspace": "workspace:*",
-    "vscode-languageserver": "^9.0.0",
-    "vscode-languageserver-textdocument": "^1.0.0"
+    "js-yaml": "^4.1.0"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.0",
     "@types/node": "^20.0.0"
   },
   "license": "MIT"

@@ -11,7 +11,7 @@ import type { Diagnostic } from '@gist-lang/parser';
 import { DiagnosticSeverity } from '@gist-lang/parser';
 import { emptySpan } from '@gist-lang/parser';
 import type { SymbolTable, RouteEntry } from './symbol-table.js';
-import type { KitRegistry } from '../workspace/kit-registry.js';
+import type { KitRegistry } from '../kit-registry.js';
 
 // ─── Primitive type names ────────────────────────────────────
 

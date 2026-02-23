@@ -6,23 +6,24 @@ import {
   InitializeResult,
   TextDocumentSyncKind,
   DiagnosticSeverity as LspDiagnosticSeverity,
-  SemanticTokensRegistrationType,
   type Diagnostic as LspDiagnostic,
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { lex, parse, cstToAst, DiagnosticSeverity } from '@gist-lang/parser';
 import type { Diagnostic, GistProgram } from '@gist-lang/parser';
-import { discoverWorkspace } from './workspace/project-discovery.js';
-import { parseGistYaml } from './workspace/gist-yaml-parser.js';
-import { loadAllKits } from './workspace/kit-loader.js';
-import { KitRegistry } from './workspace/kit-registry.js';
-import type { GistProjectConfig, WorkspaceInfo } from './workspace/types.js';
+import { discoverWorkspace, parseGistYaml, loadAllKits, KitRegistry } from '@gist-lang/workspace';
+import type { GistProjectConfig, WorkspaceInfo } from '@gist-lang/workspace';
 import { computeSemanticDiagnostics } from './features/diagnostics.js';
 import { computeCompletions } from './features/completion.js';
 import { computeHover } from './features/hover.js';
 import { computeSemanticTokens, SEMANTIC_TOKENS_LEGEND } from './features/semantic-tokens.js';
-import type { SymbolTable } from './analysis/symbol-table.js';
+import { computeDefinition } from './features/definition.js';
+import { computeReferences } from './features/references.js';
+import { prepareRename, computeRename } from './features/rename.js';
+import { computeCodeActions } from './features/code-actions.js';
+import { computeWorkspaceSymbols } from './features/workspace-symbols.js';
+import type { SymbolTable } from '@gist-lang/workspace';
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
@@ -61,6 +62,15 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
         legend: SEMANTIC_TOKENS_LEGEND,
         full: true,
       },
+      definitionProvider: true,
+      referencesProvider: true,
+      renameProvider: {
+        prepareProvider: true,
+      },
+      codeActionProvider: {
+        codeActionKinds: ['quickfix'],
+      },
+      workspaceSymbolProvider: true,
     },
   };
 });
@@ -201,6 +211,60 @@ connection.languages.semanticTokens.on((params) => {
     document,
     kitRegistry.getLoadedKitNames().length > 0 ? kitRegistry : null,
   );
+});
+
+// ─── Go to Definition ───────────────────────────────────────
+
+connection.onDefinition((params) => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return null;
+  const symbols = symbolCache.get(params.textDocument.uri);
+  return computeDefinition(document, params.position, symbols);
+});
+
+// ─── Find References ────────────────────────────────────────
+
+connection.onReferences((params) => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return [];
+  const symbols = symbolCache.get(params.textDocument.uri);
+  return computeReferences(
+    document,
+    params.position,
+    symbols,
+    params.context.includeDeclaration,
+  );
+});
+
+// ─── Rename ─────────────────────────────────────────────────
+
+connection.onPrepareRename((params) => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return null;
+  const symbols = symbolCache.get(params.textDocument.uri);
+  return prepareRename(document, params.position, symbols);
+});
+
+connection.onRenameRequest((params) => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return null;
+  const symbols = symbolCache.get(params.textDocument.uri);
+  return computeRename(document, params.position, params.newName, symbols);
+});
+
+// ─── Code Actions ───────────────────────────────────────────
+
+connection.onCodeAction((params) => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return [];
+  const symbols = symbolCache.get(params.textDocument.uri);
+  return computeCodeActions(document, params, symbols);
+});
+
+// ─── Workspace Symbols ──────────────────────────────────────
+
+connection.onWorkspaceSymbol((params) => {
+  return computeWorkspaceSymbols(params.query, symbolCache);
 });
 
 documents.listen(connection);

@@ -4,7 +4,7 @@ import {
 } from 'vscode-languageserver/node';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
 import { lex, TokenKind } from '@gist-lang/parser';
-import type { KitRegistry } from '../workspace/kit-registry.js';
+import type { KitRegistry } from '@gist-lang/workspace';
 
 // ─── Legend ────────────────────────────────────────────────
 
