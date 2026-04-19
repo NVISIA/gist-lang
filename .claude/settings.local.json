@@ -22,7 +22,9 @@
       "Bash(for pkg in gist-cli gist-formatter gist-lsp gist-parser gist-workspace)",
       "Bash(do echo \"=== $pkg ===\")",
       "Bash(test:*)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(corepack enable *)",
+      "Bash(corepack pnpm *)"
     ]
   }
 }

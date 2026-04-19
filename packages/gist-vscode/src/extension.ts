@@ -11,7 +11,7 @@ let client: LanguageClient;
 
 export function activate(context: ExtensionContext): void {
   const serverModule = context.asAbsolutePath(
-    path.join('..', 'gist-lsp', 'dist', 'index.js')
+    path.join('dist', 'server.js')
   );
 
   const serverOptions: ServerOptions = {

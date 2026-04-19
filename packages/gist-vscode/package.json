@@ -13,13 +13,6 @@
     "onLanguage:gist"
   ],
   "main": "./dist/extension.js",
-  "files": [
-    "dist",
-    "syntaxes",
-    "language-configuration.json",
-    "README.md",
-    "LICENSE"
-  ],
   "contributes": {
     "languages": [
       {
@@ -49,10 +42,11 @@
   },
   "devDependencies": {
     "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.0",
     "esbuild": "^0.24.0"
   },
   "scripts": {
-    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node && esbuild ../gist-lsp/src/index.ts --bundle --outfile=dist/server.js --format=cjs --platform=node && vsce package --no-dependencies --out dist",
     "dev": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --watch"
   }
 }
