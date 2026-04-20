@@ -120,4 +120,4 @@ src/
 
 The lexer handles GIST-specific challenges: indent-based blocks, brace-delimited inline syntax (suppresses INDENT/DEDENT inside `{}`), prose mode after keywords like `do:` and `must:`, and dynamic kit keyword recognition.
 
-The parser is a hand-written recursive descent parser implementing all 20 productions from the [GIST grammar](../../spec/GIST-grammar.md). It produces a CST that preserves every token for IDE features, then `cstToAst` extracts a clean typed AST for semantic analysis.
+The parser is a hand-written recursive descent parser implementing all 20 productions from the [GIST grammar](../../spec/gist-grammar.md). It produces a CST that preserves every token for IDE features, then `cstToAst` extracts a clean typed AST for semantic analysis.

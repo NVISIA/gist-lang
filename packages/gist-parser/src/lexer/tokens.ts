@@ -2,7 +2,7 @@ import type { TextSpan } from '../common/source-location.js';
 
 /**
  * All token kinds recognized by the GIST lexer.
- * Derived from spec/GIST-grammar.md sections 1-20.
+ * Derived from spec/gist-grammar.md sections 1-20.
  */
 export enum TokenKind {
   // ── Structural ──────────────────────────────────────────

@@ -512,10 +512,10 @@ to send_message(channel_id, content) -> Message
 
 ## Next Steps
 
-- **Read the spec:** [GIST-spec-v0.7.md](../spec/GIST-spec-v0.7.md) — the full language reference
+- **Read the spec:** [gist-spec-v0.7.md](../spec/gist-spec-v0.7.md) — the full language reference
 - **Browse examples:** [examples/](../examples/) — todo app, bookmark API, deployer CLI
-- **Build a kit:** [GIST-kit-authoring.md](GIST-kit-authoring.md) — create your own domain extension
-- **Use the interpreter:** [GIST-interpreter.md](../spec/GIST-interpreter.md) — the system prompt for LLM code generation
+- **Build a kit:** [gist-kit-authoring.md](gist-kit-authoring.md) — create your own domain extension
+- **Use the interpreter:** [gist-interpreter.md](../spec/gist-interpreter.md) — the system prompt for LLM code generation
 - **CLI reference:** [@gist-lang/cli](../packages/gist-cli/README.md) — full command documentation
 
 ---

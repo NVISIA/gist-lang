@@ -49,7 +49,12 @@
       "Bash(echo \"---exit=$?---\")",
       "Bash(/Users/ericburns/Developer/Tools/godot-4.6.2/Godot.app/Contents/MacOS/Godot --headless --path /Users/ericburns/Developer/Repos/gist-lang/examples/pong/godot --editor --quit)",
       "Bash(/Users/ericburns/Developer/Tools/godot-4.6.2/Godot.app/Contents/MacOS/Godot --headless --path /Users/ericburns/Developer/Repos/gist-lang/examples/pong/godot --quit-after 60)",
-      "Bash(/Users/ericburns/Developer/Tools/godot-4.6.2/Godot.app/Contents/MacOS/Godot --headless --path /Users/ericburns/Developer/Repos/gist-lang/examples/pong/godot res://scenes/Match.tscn --quit-after 300)"
+      "Bash(/Users/ericburns/Developer/Tools/godot-4.6.2/Godot.app/Contents/MacOS/Godot --headless --path /Users/ericburns/Developer/Repos/gist-lang/examples/pong/godot res://scenes/Match.tscn --quit-after 300)",
+      "Bash(git mv *)",
+      "Bash(pnpm -r build)",
+      "Bash(pnpm --filter gist-cli test)",
+      "Bash(pnpm -r test)",
+      "Bash(pnpm test *)"
     ]
   }
 }

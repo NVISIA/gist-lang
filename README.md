@@ -83,7 +83,7 @@ To update later, pull and rebuild:
 cd gist-lang && git pull && pnpm install && pnpm build
 ```
 
-Read the [Getting Started Guide](docs/GIST-getting-started.md) for a full walkthrough.
+Read the [Getting Started Guide](docs/gist-getting-started.md) for a full walkthrough.
 
 ---
 
@@ -113,12 +113,12 @@ See the [CLI Reference](packages/gist-cli/README.md) for full documentation.
 
 | Document | Description |
 |----------|-------------|
-| [Language Specification](spec/GIST-spec-v0.7.md) | Full language reference (v0.7) |
-| [Formal Grammar](spec/GIST-grammar.md) | EBNF grammar for parsers and tooling |
+| [Language Specification](spec/gist-spec-v0.7.md) | Full language reference (v0.7) |
+| [Formal Grammar](spec/gist-grammar.md) | EBNF grammar for parsers and tooling |
 | [gist.yaml Spec](spec/gist-yaml-spec.md) | Infrastructure manifest reference |
-| [Interpreter Instructions](spec/GIST-interpreter.md) | System prompt for LLM code generation |
-| [Getting Started](docs/GIST-getting-started.md) | Quick start guide |
-| [Kit Authoring](docs/GIST-kit-authoring.md) | How to create custom kits |
+| [Interpreter Instructions](spec/gist-interpreter.md) | System prompt for LLM code generation |
+| [Getting Started](docs/gist-getting-started.md) | Quick start guide |
+| [Kit Authoring](docs/gist-kit-authoring.md) | How to create custom kits |
 | [CLI Reference](packages/gist-cli/README.md) | Full CLI command documentation |
 
 ## Built-in Kits
@@ -165,7 +165,7 @@ The `packages/` directory contains the GIST toolchain, built as a pnpm monorepo:
 4. **Validate** with `gist check --checklist` (syntax + spec quality)
 5. **Generate** via AI agent slash commands (`/gist.generate`) or `gist bundle` for manual LLM prompting
 
-GIST is **paradigm-agnostic** — the core spec handles models, types, intents, events, state machines, and testing. Kits add domain-specific constructs. Anyone can [create a kit](docs/GIST-kit-authoring.md).
+GIST is **paradigm-agnostic** — the core spec handles models, types, intents, events, state machines, and testing. Kits add domain-specific constructs. Anyone can [create a kit](docs/gist-kit-authoring.md).
 
 ### AI Agent Integration
 
@@ -221,13 +221,13 @@ gist-lang/
     gist-vscode/                  # VS Code extension
       syntaxes/                    # TextMate grammar
   spec/                          # language specification
-    GIST-spec-v0.7.md             # core spec
-    GIST-grammar.md               # formal grammar (EBNF)
+    gist-spec-v0.7.md             # core spec
+    gist-grammar.md               # formal grammar (EBNF)
     gist-yaml-spec.md             # manifest spec
-    GIST-interpreter.md           # LLM system prompt
+    gist-interpreter.md           # LLM system prompt
   docs/                          # guides
-    GIST-getting-started.md       # quick start
-    GIST-kit-authoring.md         # kit creation guide
+    gist-getting-started.md       # quick start
+    gist-kit-authoring.md         # kit creation guide
   templates/commands/             # slash command templates for AI agents
   kits/                          # built-in domain kits
     api/  cli/  gamedev/  iac/  mobile/  web/

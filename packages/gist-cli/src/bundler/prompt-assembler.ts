@@ -9,7 +9,7 @@ import type { WorkspaceInfo } from '@gist-lang/workspace';
 export interface BundleOptions {
   /** Project root directory. */
   rootDir: string;
-  /** Whether to include the GIST-interpreter.md spec. */
+  /** Whether to include the gist-interpreter.md spec. */
   includeInterpreterSpec: boolean;
 }
 
@@ -136,8 +136,8 @@ export function formatBundle(sections: BundleSection[]): string {
  */
 function findInterpreterSpec(rootDir: string): string | null {
   const candidates = [
-    path.join(rootDir, 'spec', 'GIST-interpreter.md'),
-    path.join(rootDir, 'GIST-interpreter.md'),
+    path.join(rootDir, 'spec', 'gist-interpreter.md'),
+    path.join(rootDir, 'gist-interpreter.md'),
   ];
 
   // Also check parent directories (for when running inside examples/)
@@ -145,7 +145,7 @@ function findInterpreterSpec(rootDir: string): string | null {
   for (let i = 0; i < 5; i++) {
     const parent = path.dirname(dir);
     if (parent === dir) break;
-    candidates.push(path.join(parent, 'spec', 'GIST-interpreter.md'));
+    candidates.push(path.join(parent, 'spec', 'gist-interpreter.md'));
     dir = parent;
   }
 

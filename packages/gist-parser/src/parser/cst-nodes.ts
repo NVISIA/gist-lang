@@ -3,7 +3,7 @@ import type { Diagnostic } from '../common/diagnostics.js';
 import type { Token } from '../lexer/tokens.js';
 
 /**
- * CST node kinds. One-to-one with grammar productions from spec/GIST-grammar.md.
+ * CST node kinds. One-to-one with grammar productions from spec/gist-grammar.md.
  */
 export enum CstKind {
   // Top-level

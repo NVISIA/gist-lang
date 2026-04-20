@@ -39,7 +39,7 @@ Read, in order:
 
 1. `gist.yaml` (if present) — note existing sections you must preserve in augment mode.
 2. All existing `.gist` files — note existing models, modules, and `kit:` declarations.
-3. The GIST spec at `spec/GIST-spec-v0.7.md` (if present in the repo) — ground truth for syntax.
+3. The GIST spec at `spec/gist-spec-v0.7.md` (if present in the repo) — ground truth for syntax.
 4. For any kit you intend to declare, load `kits/<name>/kit.yaml` and `kits/<name>/KIT.md` so every construct you write is valid under that kit.
 
 ## Step 4 — Infer the stack from prose

@@ -193,7 +193,7 @@ Creates a new kit directory with:
 - `kit.yaml` — template with commented examples for keywords, constructs, yaml_sections
 - `KIT.md` — interpretation rules template for AI agents
 
-See [Kit Authoring Guide](../../docs/GIST-kit-authoring.md) for full documentation.
+See [Kit Authoring Guide](../../docs/gist-kit-authoring.md) for full documentation.
 
 #### `gist kit validate [path]`
 

@@ -20,7 +20,7 @@ Generate a complete, buildable project from the GIST specification.
 Read the following files in order:
 
 1. **`gist.yaml`** — project manifest. Extract all sections: `runtime`, `framework`, `database`, `cache`, `events`, `storage`, `auth`, `api`, `services`, `testing`, `deploy`, `env`, `conventions`. These directly control what you generate.
-2. **`spec/GIST-interpreter.md`** — the full interpreter specification. This is your primary instruction set for code generation. Follow it exactly.
+2. **`spec/gist-interpreter.md`** — the full interpreter specification. This is your primary instruction set for code generation. Follow it exactly.
 3. **Kit files** — find the `kit:` line in the `.gist` project header. For each declared kit, read:
    - `kits/<name>/kit.yaml` — machine-readable construct definitions
    - `kits/<name>/KIT.md` — human-readable interpretation rules and examples

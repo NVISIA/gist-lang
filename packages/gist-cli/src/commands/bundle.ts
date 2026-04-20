@@ -7,7 +7,7 @@ export function registerBundleCommand(program: Command): void {
     .command('bundle')
     .description('Assemble all project inputs into a single LLM prompt')
     .option('--output <file>', 'write to file instead of stdout')
-    .option('--no-spec', 'omit the GIST-interpreter.md spec from the bundle')
+    .option('--no-spec', 'omit the gist-interpreter.md spec from the bundle')
     .action((opts: { output?: string; spec?: boolean }) => {
       runBundle(opts);
     });
