@@ -14,11 +14,28 @@ GIST sits between natural language prompts (too ambiguous) and traditional sourc
 
 ## Install the CLI
 
+**Prerequisites:** Node.js ≥ 18 and [pnpm](https://pnpm.io/) (this repo pins `pnpm@10.30.1` via `packageManager`).
+
 ```bash
-npm install -g @gist-lang/cli
+# Clone the monorepo and install dependencies
+git clone https://ebtechnet.com/public-access/gist-lang.git
+cd gist-lang
+pnpm install
+
+# Build the CLI (and the workspace packages it depends on)
+pnpm build
+
+# Link the CLI onto your PATH as `gist`
+pnpm --filter @gist-lang/cli link --global
 ```
 
 This gives you the `gist` command with tools for scaffolding, validating, formatting, and managing GIST projects.
+
+To update later:
+
+```bash
+cd gist-lang && git pull && pnpm install && pnpm build
+```
 
 ---
 

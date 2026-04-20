@@ -46,9 +46,19 @@ Feed this to an LLM with the spec and interpreter instructions, and it generates
 
 ## Quick Start
 
+> **Prerequisites:** Node.js ≥ 18 and [pnpm](https://pnpm.io/) (this repo pins `pnpm@10.30.1` via `packageManager`).
+
 ```bash
-# Install the CLI
-npm install -g @gist-lang/cli
+# Clone the monorepo and install dependencies
+git clone https://ebtechnet.com/public-access/gist-lang.git
+cd gist-lang
+pnpm install
+
+# Build the CLI (and the workspace packages it depends on)
+pnpm build
+
+# Link the CLI onto your PATH as `gist`
+pnpm --filter @gist-lang/cli link --global
 
 # Scaffold a new project with AI agent integration
 gist init my-app --language typescript --agent claude-code
@@ -65,6 +75,12 @@ gist fmt --write
 
 # Generate code via your AI agent's slash command
 # /gist.generate
+```
+
+To update later, pull and rebuild:
+
+```bash
+cd gist-lang && git pull && pnpm install && pnpm build
 ```
 
 Read the [Getting Started Guide](docs/GIST-getting-started.md) for a full walkthrough.
