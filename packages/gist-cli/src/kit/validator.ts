@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { loadKit } from '@gist-lang/workspace';
+import { loadKit, detectKitDependencyIssues } from '@gist-lang/workspace';
 import type { LoadedKit, KitConstruct } from '@gist-lang/workspace';
 
 /**
@@ -72,7 +72,10 @@ export function validateKit(kitDir: string): KitValidationResult {
   // 6. Validate YAML sections
   validateYamlSections(kit, result);
 
-  // 7. Check for KIT.md
+  // 7. Validate extends_kits (per-kit checks — cross-kit done in validateKitGraph)
+  validateExtendsKits(kit, result);
+
+  // 8. Check for KIT.md
   const kitMdPath = path.join(kitDir, 'KIT.md');
   if (!fs.existsSync(kitMdPath)) {
     result.warnings.push('Missing KIT.md file — add interpretation rules for AI agents');
@@ -217,6 +220,36 @@ function validateConstructFields(
       );
     }
   }
+}
+
+function validateExtendsKits(kit: LoadedKit, result: KitValidationResult): void {
+  const seen = new Set<string>();
+  for (const parent of kit.extendsKits) {
+    if (parent === kit.name) {
+      result.errors.push(
+        `extends_kits references this kit itself ("${parent}") — a kit cannot extend itself`
+      );
+      continue;
+    }
+    if (!/^[a-z][a-z0-9_-]*$/.test(parent)) {
+      result.errors.push(
+        `extends_kits entry "${parent}" is not a valid kit name`
+      );
+    }
+    if (seen.has(parent)) {
+      result.warnings.push(`Duplicate extends_kits entry "${parent}"`);
+    }
+    seen.add(parent);
+  }
+}
+
+/**
+ * Cross-kit graph validation: missing parents and cycles. Callers that have
+ * access to the full set of loaded kits (e.g., `gist kit validate` with no
+ * path argument) run this after the per-kit checks.
+ */
+export function validateKitGraph(kits: readonly LoadedKit[]): string[] {
+  return detectKitDependencyIssues(kits);
 }
 
 function validateYamlSections(kit: LoadedKit, result: KitValidationResult): void {

@@ -251,6 +251,63 @@ description: Empty kit
     expect(result.errors).toHaveLength(0);
     expect(result.kitName).toBe('gamedev');
   });
+
+  it('accepts a well-formed extends_kits reference', () => {
+    const kitDir = path.join(tmpDir, 'child-kit');
+    writeKitYaml(kitDir, `
+kit: child
+version: 1.0.0
+keywords:
+  - widget
+extends_kits:
+  - parent
+`);
+    const result = validateKit(kitDir);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('errors when extends_kits references itself', () => {
+    const kitDir = path.join(tmpDir, 'self-ref');
+    writeKitYaml(kitDir, `
+kit: self
+version: 1.0.0
+keywords:
+  - widget
+extends_kits:
+  - self
+`);
+    const result = validateKit(kitDir);
+    expect(result.errors.some(e => /cannot extend itself/.test(e))).toBe(true);
+  });
+
+  it('errors when extends_kits contains a malformed kit name', () => {
+    const kitDir = path.join(tmpDir, 'bad-parent');
+    writeKitYaml(kitDir, `
+kit: child
+version: 1.0.0
+keywords:
+  - widget
+extends_kits:
+  - "Not A Kit Name"
+`);
+    const result = validateKit(kitDir);
+    expect(result.errors.some(e => /not a valid kit name/.test(e))).toBe(true);
+  });
+
+  it('warns on duplicate extends_kits entries', () => {
+    const kitDir = path.join(tmpDir, 'dup-parent');
+    writeKitYaml(kitDir, `
+kit: child
+version: 1.0.0
+keywords:
+  - widget
+extends_kits:
+  - parent
+  - parent
+`);
+    const result = validateKit(kitDir);
+    expect(result.warnings.some(w => /Duplicate extends_kits entry/.test(w))).toBe(true);
+  });
 });
 
 // ─── Scaffolder Tests ─────────────────────────────────────

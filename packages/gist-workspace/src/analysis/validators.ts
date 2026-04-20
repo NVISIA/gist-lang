@@ -262,8 +262,14 @@ function checkStateMachines(program: GistProgram, symbols: SymbolTable): Diagnos
   const diagnostics: Diagnostic[] = [];
 
   for (const sm of program.stateMachines) {
-    // Check that forModel references a declared model
-    if (sm.forModel && !symbols.models.has(sm.forModel)) {
+    // State-machine targets can be either models (core GIST) or named kit
+    // constructs (e.g. gamedev `entity`, godot `node`). Field-existence
+    // checks only apply when the target is a model — kit constructs have
+    // free-form field shapes defined by each kit.
+    const isModelTarget = !!sm.forModel && symbols.models.has(sm.forModel);
+    const isKitTarget = !!sm.forModel && symbols.kitConstructs.has(sm.forModel);
+
+    if (sm.forModel && !isModelTarget && !isKitTarget) {
       diagnostics.push(error(
         sm.span,
         `State machine '${sm.name}' references undeclared model '${sm.forModel}'`,
@@ -271,8 +277,8 @@ function checkStateMachines(program: GistProgram, symbols: SymbolTable): Diagnos
     }
 
     // Check that forField exists on the referenced model
-    if (sm.forModel && sm.forField) {
-      const model = symbols.models.get(sm.forModel);
+    if (isModelTarget && sm.forField) {
+      const model = symbols.models.get(sm.forModel!);
       if (model) {
         const fieldExists = model.fields.some(f => f.name === sm.forField) ||
           model.spreads.some(s => {
@@ -371,6 +377,10 @@ function checkKitKeywords(
 ): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
 
+  // Expand declaredKits with transitive parents via extends_kits so a project
+  // that declares only `kit: godot` counts as having `gamedev` active too.
+  const activeKits = expandWithTransitiveParents(declaredKits, kitRegistry);
+
   for (const kc of program.kitConstructs) {
     const keyword = kc.keyword;
     if (!kitRegistry.isKitKeyword(keyword)) {
@@ -383,7 +393,7 @@ function checkKitKeywords(
 
     // Check that the kit providing this keyword is declared in the project header
     const sourceKit = kitRegistry.getKitForKeyword(keyword);
-    if (sourceKit && declaredKits.length > 0 && !declaredKits.includes(sourceKit)) {
+    if (sourceKit && declaredKits.length > 0 && !activeKits.has(sourceKit)) {
       diagnostics.push(error(
         kc.span,
         `Keyword '${keyword}' requires kit '${sourceKit}' but it is not declared in project header (kit: ...)`,
@@ -392,6 +402,25 @@ function checkKitKeywords(
   }
 
   return diagnostics;
+}
+
+function expandWithTransitiveParents(
+  declared: string[],
+  registry: KitRegistry,
+): Set<string> {
+  const result = new Set<string>();
+  const stack = [...declared];
+  while (stack.length > 0) {
+    const name = stack.pop()!;
+    if (result.has(name)) continue;
+    result.add(name);
+    const kit = registry.getKit(name);
+    if (!kit) continue;
+    for (const parent of kit.extendsKits) {
+      if (!result.has(parent)) stack.push(parent);
+    }
+  }
+  return result;
 }
 
 // ─── Kit construct field validation ──────────────────────────
@@ -406,12 +435,16 @@ function checkKitConstructFields(
     const construct = kitRegistry.getConstruct(kc.keyword);
     if (!construct) continue;
 
-    // Check required fields are present
+    // Check required fields are present.
+    // Fields can appear either as KitBlockNodes (`key: value` context-line
+    // syntax on declarations) or as FieldDeclarations (`name: Type` inside
+    // `{ }` block-kind constructs).
     for (const [fieldName, fieldDef] of Object.entries(construct.fields)) {
       if (!fieldDef.required) continue;
 
       const hasField = kc.children.some(child => {
         if ('key' in child && child.key === fieldName) return true;
+        if ('name' in child && child.name === fieldName) return true;
         return false;
       });
 

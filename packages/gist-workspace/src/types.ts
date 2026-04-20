@@ -102,6 +102,7 @@ export interface LoadedKit {
   constructs: Map<string, KitConstruct>;
   yamlSections: Record<string, KitYamlSection>;
   extends: string[];
+  extendsKits: string[];
 }
 
 export interface KitConstruct {

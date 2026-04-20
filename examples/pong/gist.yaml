@@ -1,0 +1,49 @@
+project: pong
+version: 0.1.0
+description: Classic 2D Pong — player (keyboard) vs. AI opponent. Built on the Godot 4 kit.
+
+runtime:
+  language: GDScript
+  platform: Godot
+
+engine:
+  name: Godot
+  version: "4.3"
+  renderer: forward_plus
+  target_fps: 60
+
+godot:
+  version: "4.3"
+  renderer: forward_plus
+  main_scene: "res://scenes/Match.tscn"
+  project_name: "Pong"
+
+gdscript:
+  typed: true
+  class_name_style: always
+  indent: tabs
+
+godot_physics:
+  dimension: "2d"
+  layer_names:
+    1: paddles
+    2: ball
+    3: walls
+
+physics:
+  type: built-in
+  gravity: { x: 0, y: 0 }
+
+assets:
+  base_path: res://assets
+  sprites: res://assets/sprites
+  audio: res://assets/audio
+
+audio:
+  master_volume: 1.0
+  sfx_bus: SFX
+
+input:
+  move_up:   [w, arrow_up]
+  move_down: [s, arrow_down]
+  pause:     [escape]

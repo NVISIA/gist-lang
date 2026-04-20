@@ -50,6 +50,7 @@ export function parseKitYaml(content: string): LoadedKit | null {
     constructs: parseConstructs(obj['constructs']),
     yamlSections: parseYamlSections(obj['yaml_sections']),
     extends: parseStringArray(obj['extends']),
+    extendsKits: parseStringArray(obj['extends_kits']),
   };
 
   return kit;
@@ -57,6 +58,15 @@ export function parseKitYaml(content: string): LoadedKit | null {
 
 /**
  * Load all kits from an array of kit directories.
+ *
+ * The returned kits are topologically ordered by `extends_kits` so that a
+ * parent kit always appears before any kit that extends it. When consumers
+ * feed this array into `KitRegistry.addKit` in order, child kits can override
+ * parent keywords/constructs (last-write-wins semantics in the registry).
+ *
+ * `extends_kits` references to kits that are not present in `kitDirs` are
+ * silently ignored by the loader — the validator surfaces them as errors.
+ * Cycles are broken by emitting the involved kits in discovery order.
  */
 export function loadAllKits(kitDirs: string[]): LoadedKit[] {
   const kits: LoadedKit[] = [];
@@ -66,7 +76,144 @@ export function loadAllKits(kitDirs: string[]): LoadedKit[] {
       kits.push(kit);
     }
   }
-  return kits;
+  return topoSortKits(kits);
+}
+
+/**
+ * Topologically sort kits so parents (listed in `extends_kits`) come before
+ * children. Uses Kahn's algorithm; on cycle, falls back to appending the
+ * remaining kits in their original order.
+ */
+export function topoSortKits(kits: LoadedKit[]): LoadedKit[] {
+  const byName = new Map<string, LoadedKit>();
+  for (const kit of kits) byName.set(kit.name, kit);
+
+  // Build reverse edges: parent -> [children that extend it]
+  const children = new Map<string, string[]>();
+  const inDegree = new Map<string, number>();
+  for (const kit of kits) {
+    inDegree.set(kit.name, 0);
+  }
+  for (const kit of kits) {
+    for (const parent of kit.extendsKits) {
+      if (!byName.has(parent)) continue; // unknown parent — skip edge
+      if (!children.has(parent)) children.set(parent, []);
+      children.get(parent)!.push(kit.name);
+      inDegree.set(kit.name, (inDegree.get(kit.name) ?? 0) + 1);
+    }
+  }
+
+  const ordered: LoadedKit[] = [];
+  const emitted = new Set<string>();
+  const queue: string[] = [];
+  // Seed queue with zero-in-degree kits, preserving discovery order
+  for (const kit of kits) {
+    if ((inDegree.get(kit.name) ?? 0) === 0) queue.push(kit.name);
+  }
+  while (queue.length > 0) {
+    const name = queue.shift()!;
+    if (emitted.has(name)) continue;
+    emitted.add(name);
+    ordered.push(byName.get(name)!);
+    for (const child of children.get(name) ?? []) {
+      const next = (inDegree.get(child) ?? 0) - 1;
+      inDegree.set(child, next);
+      if (next === 0) queue.push(child);
+    }
+  }
+  // Anything left over is part of a cycle — append in discovery order
+  for (const kit of kits) {
+    if (!emitted.has(kit.name)) {
+      ordered.push(kit);
+    }
+  }
+  return ordered;
+}
+
+/**
+ * Given a set of kit names a project explicitly activates, return the full
+ * set of kit names that must be loaded — including transitive parents via
+ * `extends_kits`. Unknown names in `requested` or unknown parent references
+ * are dropped silently; use the validator for diagnostics.
+ */
+export function resolveKitDependencies(
+  requested: readonly string[],
+  allKits: readonly LoadedKit[],
+): string[] {
+  const byName = new Map<string, LoadedKit>();
+  for (const kit of allKits) byName.set(kit.name, kit);
+
+  const resolved = new Set<string>();
+  const stack = [...requested];
+  while (stack.length > 0) {
+    const name = stack.pop()!;
+    if (resolved.has(name)) continue;
+    const kit = byName.get(name);
+    if (!kit) continue;
+    resolved.add(name);
+    for (const parent of kit.extendsKits) {
+      if (!resolved.has(parent)) stack.push(parent);
+    }
+  }
+  return [...resolved];
+}
+
+/**
+ * Detect missing `extends_kits` references and dependency cycles across a
+ * set of loaded kits. Returns an array of human-readable issue strings;
+ * empty when the graph is clean.
+ */
+export function detectKitDependencyIssues(kits: readonly LoadedKit[]): string[] {
+  const issues: string[] = [];
+  const byName = new Map<string, LoadedKit>();
+  for (const kit of kits) byName.set(kit.name, kit);
+
+  // Missing parents + self-references
+  for (const kit of kits) {
+    for (const parent of kit.extendsKits) {
+      if (parent === kit.name) {
+        issues.push(`Kit "${kit.name}" extends_kits references itself`);
+        continue;
+      }
+      if (!byName.has(parent)) {
+        issues.push(`Kit "${kit.name}" extends_kits references unknown kit "${parent}"`);
+      }
+    }
+  }
+
+  // Cycle detection (DFS with coloring)
+  const WHITE = 0, GRAY = 1, BLACK = 2;
+  const color = new Map<string, number>();
+  for (const kit of kits) color.set(kit.name, WHITE);
+  const reported = new Set<string>();
+  const visit = (name: string, stack: string[]): void => {
+    const c = color.get(name);
+    if (c === BLACK) return;
+    if (c === GRAY) {
+      const cycleKey = [...stack.slice(stack.indexOf(name)), name].sort().join(',');
+      if (!reported.has(cycleKey)) {
+        reported.add(cycleKey);
+        const path = [...stack.slice(stack.indexOf(name)), name].join(' -> ');
+        issues.push(`Kit dependency cycle detected: ${path}`);
+      }
+      return;
+    }
+    color.set(name, GRAY);
+    stack.push(name);
+    const kit = byName.get(name);
+    if (kit) {
+      for (const parent of kit.extendsKits) {
+        if (byName.has(parent) && parent !== name) visit(parent, stack);
+      }
+    }
+    stack.pop();
+    color.set(name, BLACK);
+  };
+  for (const kit of kits) {
+    if (color.get(kit.name) === WHITE) visit(kit.name, []);
+  }
+
+  return issues;
 }
 
 // ─── Internal parsers ────────────────────────────────────────

@@ -471,6 +471,25 @@ Projects can load multiple kits. Your kit should play well with others:
 - Document which other kits yours pairs well with
 - Test with at least one other kit loaded alongside yours
 
+### Extending another kit with `extends_kits:`
+
+When your kit specializes another kit (e.g., a `godot` kit that builds on the engine-agnostic `gamedev` kit), declare the parent with `extends_kits:`:
+
+```yaml
+kit: godot
+version: 1.0.0
+extends_kits:
+  - gamedev     # auto-loaded whenever `kit: godot` is activated
+```
+
+This does three things:
+
+1. **Topological load order.** The loader registers `gamedev` before `godot`, so when both define the same keyword the child kit's definition wins (useful when the child wants to override a parent construct's behavior).
+2. **Transitive activation.** A project that writes only `kit: godot` implicitly activates `gamedev` too — authors don't have to remember to list both.
+3. **Validated graph.** `gist kit validate` (with no path) checks that every `extends_kits:` entry exists and that there are no cycles.
+
+Use `extends_kits:` for *kit-to-kit* relationships. Use `extends:` (core constructs list) when your kit gives new meaning to built-in keywords like `state`, `on`, or `rules` — those are different concepts.
+
 ---
 
 ## Reference: kit.yaml Schema
@@ -495,6 +514,7 @@ yaml_sections:                 # gist.yaml sections this kit adds
 keywords: [list, of, keywords] # new keywords this kit introduces
 
 extends: [core, constructs]    # core constructs this kit gives new meaning to
+extends_kits: [other, kits]    # other kits this kit builds on (auto-loaded)
 
 constructs:                    # IDE metadata (see spec §12.7)
   <keyword>:

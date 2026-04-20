@@ -1,0 +1,265 @@
+project pong
+  > Classic Pong. One paddle is human (WASD / arrows). The other is AI
+  > that tracks the ball with a small reaction delay so it's beatable.
+
+  kit: godot
+  stack: gist.yaml
+
+  always:
+    ball speed clamped to [200, 900]
+    paddle y clamped to [arena.top + paddle.half_height, arena.bottom - paddle.half_height]
+    first side to reach win_score ends the match
+
+  rules match:
+    win_score:         11
+    ball_start_speed:  360.0
+    ball_speed_up:     1.05    # multiplier applied on each paddle hit
+    paddle_speed:      520.0
+    arena_width:       960
+    arena_height:      540
+
+  rules ai:
+    easy:   { react_delay: 0.22, max_speed: 380, accuracy: 0.80 }
+    normal: { react_delay: 0.12, max_speed: 480, accuracy: 0.92 }
+    hard:   { react_delay: 0.04, max_speed: 580, accuracy: 0.99 }
+
+
+// ── Signals ───────────────────────────────────────────────────
+
+signal paddle_hit(side: string, ball_speed: float)
+signal wall_hit(y: float)
+signal point_scored(scoring_side: string)
+signal match_finished(winner_side: string, final_score: Vector2i)
+
+
+// ── Autoloads ─────────────────────────────────────────────────
+
+autoload MatchState
+  > Live match state: scores, current difficulty, ball serving side.
+  player_score: int = 0
+  ai_score: int = 0
+  difficulty: string = "normal"
+  serving_side: string = "player"
+  state: serving | playing | point_paused | finished
+
+  on point_scored(scoring_side):
+    if scoring_side == "player":
+      player_score += 1
+    else:
+      ai_score += 1
+    serving_side = opposite(scoring_side)
+    state = point_paused
+    if player_score >= from rules match.win_score or ai_score >= from rules match.win_score:
+      emit match_finished(
+        winner_side: "player" if player_score > ai_score else "ai",
+        final_score: (player_score, ai_score)
+      )
+      state = finished
+    else:
+      after 1.0s: state = serving
+
+autoload AudioManager
+  > SFX playback for paddle hits, wall bounces, and scoring.
+  fn play(name: string, pitch: float = 1.0)
+
+
+// ── Custom Resource: difficulty profile ───────────────────────
+
+resource AIDifficulty {
+  extends: Resource
+  react_delay: float
+  max_speed: float
+  accuracy: float
+}
+
+
+// ── Nodes ─────────────────────────────────────────────────────
+
+node Paddle {
+  base: CharacterBody2D
+  group: paddles
+
+  side: string                // "player" | "ai"
+  speed: float = from rules match.paddle_speed
+  half_height: float = 40.0
+  velocity: Coord = (0, 0)
+
+  hitbox: rectangle(16, 80)
+  collision_layer: paddles
+  collision_mask: [ball]
+}
+
+node PlayerPaddle {
+  base: CharacterBody2D
+  group: paddles
+  side: "player"
+  > Reads move_up / move_down input actions and translates them into vertical
+  > velocity. Clamped to arena bounds by the `always:` invariant.
+}
+
+node AIPaddle {
+  base: CharacterBody2D
+  group: paddles
+  side: "ai"
+  difficulty: -> AIDifficulty = from rules ai.normal
+  reaction_buffer: float = 0.0
+  > Tracks the ball's predicted y-intercept with `difficulty.react_delay`
+  > latency and jitters the target by `(1 - difficulty.accuracy) * paddle_height`
+  > so it occasionally misses.
+}
+
+node Ball {
+  base: CharacterBody2D
+  group: ball
+
+  speed: float = from rules match.ball_start_speed
+  velocity: Coord = (1, 0)     // unit direction; multiplied by `speed`
+  radius: float = 8.0
+
+  hitbox: circle(8)
+  collision_layer: ball
+  collision_mask: [paddles, walls]
+}
+
+node Arena {
+  base: Node2D
+  > Holds the playfield: top/bottom walls, center dashed line, score HUD.
+  children:
+    - StaticBody2D { group: walls, hitbox: rectangle(arena_width, 4) }  // top
+    - StaticBody2D { group: walls, hitbox: rectangle(arena_width, 4) }  // bottom
+    - CanvasLayer { children: [Label, Label] }                          // score
+}
+
+
+// ── Scenes ────────────────────────────────────────────────────
+
+scene MainMenu
+  > Title with difficulty selection and Start button.
+  on start:
+    AudioManager.play("menu_music")
+    show title "PONG"
+    show difficulty selector bound to MatchState.difficulty
+  input:
+    enter -> transition to Match
+    escape -> quit game
+
+scene Match
+  > The actual game. Spawns Arena, Ball, PlayerPaddle, AIPaddle, wires signals.
+  layers: [arena, entities, particles, ui]
+  on start:
+    spawn Arena at (0, 0)
+    spawn PlayerPaddle at (40, arena_height / 2)
+    spawn AIPaddle at (arena_width - 40, arena_height / 2)
+    spawn Ball at (arena_width / 2, arena_height / 2)
+    serve ball toward MatchState.serving_side
+  on pause:
+    show pause overlay
+  on exit:
+    save nothing (Pong has no persistence)
+
+scene GameOver
+  > Shows the winner and final score. Offers rematch or menu.
+  on start:
+    show text "{{winner_side}} wins {{final_score.x}} - {{final_score.y}}"
+    AudioManager.play("match_end")
+  input:
+    enter -> transition to Match
+    escape -> transition to MainMenu
+
+
+// ── State machines ───────────────────────────────────────────
+
+state BallState for Ball.status:
+  waiting -> serving when MatchState.state == serving
+  serving -> live after 0.6s
+  live -> scored when ball.x < 0 or ball.x > arena_width
+  scored -> waiting when MatchState.state == point_paused
+
+  on enter serving:
+    position ball at arena center
+    pick random angle in [-30, +30] degrees offset from horizontal
+    velocity.x = +1 if MatchState.serving_side == "player" else -1
+
+  on enter live:
+    apply velocity * speed each frame
+
+  on enter scored:
+    scoring_side = "player" if ball.x > arena_width else "ai"
+    AudioManager.play("score")
+    emit point_scored(scoring_side)
+
+
+// ── Systems (per-frame logic) ────────────────────────────────
+
+system PlayerControl
+  > Translate input into PlayerPaddle velocity.
+  query: PlayerPaddle
+  update(dt):
+    direction = 0
+    if input move_up held:   direction -= 1
+    if input move_down held: direction += 1
+    paddle.velocity.y = direction * paddle.speed
+    paddle.move_and_slide()
+
+system AIControl
+  > Predict ball y-intercept at the AI paddle's x plane, then move toward
+  > it with bounded speed and a reaction delay. Adds noise inversely
+  > proportional to difficulty.accuracy so higher difficulty tracks tighter.
+  query: AIPaddle
+  update(dt):
+    ball = get first Ball
+    if ball is null or MatchState.state != playing:
+      paddle.velocity.y = 0
+      return
+
+    paddle.reaction_buffer += dt
+    if paddle.reaction_buffer < paddle.difficulty.react_delay:
+      return
+    paddle.reaction_buffer = 0
+
+    target_y = predict ball intercept at paddle.x using current velocity
+    jitter = (1 - paddle.difficulty.accuracy) * paddle.hitbox.height
+    target_y += random(-jitter, jitter)
+
+    delta_y = target_y - paddle.y
+    max_step = paddle.difficulty.max_speed * dt
+    paddle.velocity.y = clamp(delta_y / dt, -paddle.difficulty.max_speed, paddle.difficulty.max_speed)
+    paddle.move_and_slide()
+
+system BallPhysics
+  > Move ball, handle collisions with paddles (reflect + speed up) and
+  > top/bottom walls (reflect only). Outside horizontal bounds → score.
+  query: Ball
+  update(dt):
+    if MatchState.state != playing:
+      return
+    ball.position += ball.velocity.normalized() * ball.speed * dt
+
+
+// ── Event handlers (signal connections) ──────────────────────
+
+on collision(ball: Ball, paddle: Paddle):
+  // Reflect horizontally, nudge vertical component based on where the
+  // ball hit the paddle so players can aim their returns.
+  offset = (ball.y - paddle.y) / paddle.half_height   // -1..1
+  ball.velocity.x = -ball.velocity.x
+  ball.velocity.y = offset
+  normalize ball.velocity
+  ball.speed = ball.speed * from rules match.ball_speed_up
+  AudioManager.play("paddle_hit", pitch: 1.0 + offset * 0.1)
+  emit paddle_hit(side: paddle.side, ball_speed: ball.speed)
+
+on collision(ball: Ball, _wall) when _wall in group walls:
+  ball.velocity.y = -ball.velocity.y
+  AudioManager.play("wall_hit")
+  emit wall_hit(y: ball.y)
+
+on match_finished(winner_side, final_score):
+  transition to GameOver
+
+
+// ── Pure functions ───────────────────────────────────────────
+
+fn opposite(side: string) -> string
+  code:
+    return "ai" if side == "player" else "player"

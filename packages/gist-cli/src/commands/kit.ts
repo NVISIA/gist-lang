@@ -8,7 +8,7 @@ import {
   KitRegistry,
 } from '@gist-lang/workspace';
 import type { LoadedKit } from '@gist-lang/workspace';
-import { validateKit } from '../kit/validator.js';
+import { validateKit, validateKitGraph } from '../kit/validator.js';
 import type { KitValidationResult } from '../kit/validator.js';
 import { scaffoldKit } from '../kit/scaffolder.js';
 import { listBuiltinKitDirs, findBuiltinKit } from '../kit/builtins.js';
@@ -81,6 +81,7 @@ function runKitList(opts: { json?: boolean }): void {
       description: kit.description ?? '',
       keywords: kit.keywords,
       extends: kit.extends,
+      extends_kits: kit.extendsKits,
       constructs: [...kit.constructs.keys()],
       yamlSections: Object.keys(kit.yamlSections),
     }));
@@ -106,6 +107,9 @@ function runKitList(opts: { json?: boolean }): void {
     const extendsLine = kit.extends.length > 0
       ? `  extends: ${kit.extends.join(', ')}`
       : '';
+    const extendsKitsLine = kit.extendsKits.length > 0
+      ? `  extends_kits: ${kit.extendsKits.join(', ')}`
+      : '';
 
     console.log(`  \x1b[36m${kit.name}\x1b[0m v${kit.version}`);
     if (kit.description) {
@@ -114,6 +118,7 @@ function runKitList(opts: { json?: boolean }): void {
     if (keywords) console.log(`    ${keywords}`);
     if (constructs) console.log(`    ${constructs}`);
     if (extendsLine) console.log(`    ${extendsLine}`);
+    if (extendsKitsLine) console.log(`    ${extendsKitsLine}`);
     console.log('');
   }
 }
@@ -264,8 +269,17 @@ function runKitValidate(kitPath: string | undefined, opts: { json?: boolean }): 
     if (result.errors.length > 0) hasErrors = true;
   }
 
+  // Cross-kit graph checks (missing extends_kits parents, cycles) only
+  // make sense when the user asked us to validate everything we can see.
+  const graphIssues: string[] = [];
+  if (!kitPath) {
+    const loaded = loadAllKits(kitDirs);
+    graphIssues.push(...validateKitGraph(loaded));
+    if (graphIssues.length > 0) hasErrors = true;
+  }
+
   if (opts.json) {
-    console.log(JSON.stringify(allResults, null, 2));
+    console.log(JSON.stringify({ results: allResults, graphIssues }, null, 2));
     return hasErrors ? 1 : 0;
   }
 
@@ -289,8 +303,16 @@ function runKitValidate(kitPath: string | undefined, opts: { json?: boolean }): 
     console.log('');
   }
 
+  if (graphIssues.length > 0) {
+    console.log(`\x1b[1mKit dependency graph\x1b[0m`);
+    for (const issue of graphIssues) {
+      console.log(`  \x1b[31m✗ error\x1b[0m: ${issue}`);
+    }
+    console.log('');
+  }
+
   if (hasErrors) {
-    const errorCount = allResults.reduce((sum, r) => sum + r.errors.length, 0);
+    const errorCount = allResults.reduce((sum, r) => sum + r.errors.length, 0) + graphIssues.length;
     console.log(`\x1b[31m✗\x1b[0m ${errorCount} error${errorCount !== 1 ? 's' : ''} found.`);
     return 1;
   }

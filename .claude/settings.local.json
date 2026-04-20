@@ -37,7 +37,19 @@
       "Bash(mkdir -p /tmp/gist-regress)",
       "Bash(ls basic/.gist)",
       "Bash(/Users/ericburns/Developer/Repos/gist-lang/node_modules/.bin/vitest run *)",
-      "Bash(/Users/ericburns/Developer/Repos/gist-lang/node_modules/.bin/tsc -b packages/gist-parser packages/gist-workspace packages/gist-formatter packages/gist-lsp packages/gist-cli)"
+      "Bash(/Users/ericburns/Developer/Repos/gist-lang/node_modules/.bin/tsc -b packages/gist-parser packages/gist-workspace packages/gist-formatter packages/gist-lsp packages/gist-cli)",
+      "Bash(pnpm --filter @gist-lang/workspace build)",
+      "Bash(./node_modules/.bin/tsc -p packages/gist-workspace/tsconfig.json)",
+      "Bash(./node_modules/.bin/tsc -p packages/gist-cli/tsconfig.json)",
+      "Bash(./node_modules/.bin/tsc -p packages/gist-lsp/tsconfig.json)",
+      "Bash(./node_modules/.bin/vitest run *)",
+      "mcp__godot-mcp__get_godot_version",
+      "Bash(GODOT_PATH=/Users/ericburns/Developer/Tools/godot-4.6.2/Godot.app/Contents/MacOS/Godot /Users/ericburns/Developer/Tools/godot-4.6.2/Godot.app/Contents/MacOS/Godot --version)",
+      "Bash(/Users/ericburns/Developer/Tools/godot-4.6.2/Godot.app/Contents/MacOS/Godot --headless --path /Users/ericburns/Developer/Repos/gist-lang/examples/pong/godot --check-only --script scripts/Paddle.gd)",
+      "Bash(echo \"---exit=$?---\")",
+      "Bash(/Users/ericburns/Developer/Tools/godot-4.6.2/Godot.app/Contents/MacOS/Godot --headless --path /Users/ericburns/Developer/Repos/gist-lang/examples/pong/godot --editor --quit)",
+      "Bash(/Users/ericburns/Developer/Tools/godot-4.6.2/Godot.app/Contents/MacOS/Godot --headless --path /Users/ericburns/Developer/Repos/gist-lang/examples/pong/godot --quit-after 60)",
+      "Bash(/Users/ericburns/Developer/Tools/godot-4.6.2/Godot.app/Contents/MacOS/Godot --headless --path /Users/ericburns/Developer/Repos/gist-lang/examples/pong/godot res://scenes/Match.tscn --quit-after 300)"
     ]
   }
 }

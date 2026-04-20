@@ -1,0 +1,178 @@
+kit: godot
+version: 1.0.0
+author: gist-core
+description: Godot 4 engine constructs — nodes, signals, autoloads, resources, and GDScript code generation
+license: MIT
+
+# ─── Parent kits ──────────────────────────────────────
+# Activating `godot` auto-activates `gamedev` too. The Godot kit specializes
+# the engine-agnostic gamedev vocabulary (scene, entity, system, input, …)
+# into Godot-native output.
+
+extends_kits:
+  - gamedev
+
+# ─── Core constructs this kit gives new meaning to ──
+# Inherited gamedev keywords are reinterpreted as Godot concepts; see KIT.md.
+
+extends:
+  - state        # Godot state machines (GDScript match dispatch or AnimationTree)
+  - on           # Connected signal handlers
+  - fn           # GDScript functions with type hints
+  - rules        # Emitted as .tres Resource files under res://resources/rules/
+  - always       # Asserts + type-hinted fields
+  - ephemeral    # Tweens, Timers, transient child nodes
+  - code         # Raw GDScript code blocks
+
+# ─── gist.yaml sections ───────────────────────────────
+# Settings that configure Godot project generation.
+
+yaml_sections:
+  godot:
+    description: Godot 4.x engine settings
+    fields:
+      version:
+        type: string
+        default: "4.3"
+        doc: Godot engine version (4.2+ supported)
+      renderer:
+        type: string
+        values: [forward_plus, mobile, compatibility]
+        default: forward_plus
+      main_scene:
+        type: string
+        doc: "res:// path to the opening scene (e.g. res://scenes/MainMenu.tscn)"
+      project_name:
+        type: string
+  gdscript:
+    description: GDScript style and code-generation options
+    fields:
+      typed:
+        type: boolean
+        default: true
+        doc: Emit type hints on variables and function signatures
+      class_name_style:
+        type: string
+        values: [always, when_preloaded, never]
+        default: when_preloaded
+        doc: When to emit `class_name` declarations on scripts
+      indent:
+        type: string
+        values: [tabs, spaces]
+        default: tabs
+  godot_physics:
+    description: Readable physics layer names and 2D/3D default
+    fields:
+      dimension:
+        type: string
+        values: ["2d", "3d"]
+        default: "2d"
+      layer_names:
+        type: object
+        doc: "Map of layer number to readable name, e.g. { 1: player, 2: enemies }"
+  godot_input_map:
+    description: "Godot InputMap action bindings (supplements the gamedev input block)"
+    fields:
+      "[action]":
+        type: object
+        doc: Keys, mouse buttons, or gamepad events for this action
+
+# ─── Keywords ─────────────────────────────────────────
+
+keywords:
+  - node
+  - signal
+  - autoload
+  - resource
+  - group
+
+# ─── Constructs ───────────────────────────────────────
+
+constructs:
+  node:
+    kind: block
+    name_style: PascalCase
+    doc: A Godot scene-tree node with a specific base class (Node2D, CharacterBody2D, Control, etc.)
+    fields:
+      base:
+        type: identifier
+        required: true
+        doc: Godot base class the node extends (Node, Node2D, Node3D, CharacterBody2D, Area2D, Control, …)
+        completions:
+          - Node
+          - Node2D
+          - Node3D
+          - CharacterBody2D
+          - CharacterBody3D
+          - RigidBody2D
+          - RigidBody3D
+          - Area2D
+          - Area3D
+          - StaticBody2D
+          - StaticBody3D
+          - Control
+          - Sprite2D
+          - AnimatedSprite2D
+          - AnimationPlayer
+          - AudioStreamPlayer
+          - Camera2D
+          - Camera3D
+      script:
+        type: identifier
+        doc: GDScript file to attach (defaults to <name>.gd)
+      children:
+        type: list
+        doc: Nested nodes (inline node subtree)
+    supports: [always, context_line, field_passthrough]
+    snippet: |
+      node ${1:Name} {
+        base: ${2:Node2D}
+        ${0}
+      }
+
+  signal:
+    kind: declaration
+    name_style: identifier
+    doc: Godot signal — a named event a node emits and others can connect to
+    fields:
+      args:
+        type: list
+        doc: "Typed argument list, e.g. (damage: int, source: Node)"
+      emitter:
+        type: identifier
+        doc: The node type or autoload that emits this signal
+    snippet: |
+      signal ${1:signal_name}(${2:arg: Type})
+        ${0}
+
+  autoload:
+    kind: declaration
+    name_style: PascalCase
+    doc: Global singleton registered in project.godot's AutoLoad list (GameManager, AudioManager, …)
+    fields:
+      script:
+        type: identifier
+        doc: GDScript file path (defaults to res://autoload/<Name>.gd)
+    supports: [context_line, code, always]
+    snippet: |
+      autoload ${1:GameManager}
+        ${0}
+
+  resource:
+    kind: block
+    name_style: PascalCase
+    doc: Custom `Resource` subclass — data-driven asset emitted as a .tres file
+    fields:
+      extends:
+        type: identifier
+        doc: Parent Resource class (defaults to Resource)
+    supports: [always, field_passthrough]
+    snippet: |
+      resource ${1:Name} {
+        ${0}
+      }
+
+  group:
+    kind: inline
+    name_style: identifier
+    doc: Godot group tag — nodes in this group can be queried via get_tree().get_nodes_in_group(...)

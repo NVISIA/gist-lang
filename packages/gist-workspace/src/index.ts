@@ -27,7 +27,14 @@ export { discoverWorkspace } from './project-discovery.js';
 export { parseGistYaml, parseGistYamlContent } from './gist-yaml-parser.js';
 
 // Kit loading
-export { loadKit, parseKitYaml, loadAllKits } from './kit-loader.js';
+export {
+  loadKit,
+  parseKitYaml,
+  loadAllKits,
+  topoSortKits,
+  resolveKitDependencies,
+  detectKitDependencyIssues,
+} from './kit-loader.js';
 
 // Kit registry
 export { KitRegistry } from './kit-registry.js';

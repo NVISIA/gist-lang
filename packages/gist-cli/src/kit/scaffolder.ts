@@ -38,6 +38,13 @@ extends: []
 #  - on
 #  - fn
 
+# ─── Parent kits ──────────────────────────────────────
+# Other kits this kit builds on top of. When a project activates
+# this kit, parents listed here are implicitly activated too.
+
+extends_kits: []
+#  - gamedev
+
 # ─── Constructs ───────────────────────────────────────
 # Define each keyword's behavior for IDE support
 # (completions, hover docs, snippets, field validation).
