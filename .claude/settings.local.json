@@ -24,7 +24,20 @@
       "Bash(test:*)",
       "Bash(done)",
       "Bash(corepack enable *)",
-      "Bash(corepack pnpm *)"
+      "Bash(corepack pnpm *)",
+      "Bash(pnpm build *)",
+      "Bash(../../node_modules/.bin/tsc --noEmit)",
+      "Bash(/Users/ericburns/Developer/Repos/gist-lang/node_modules/.bin/tsc -p /Users/ericburns/Developer/Repos/gist-lang/packages/gist-cli/tsconfig.json --noEmit)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(/Users/ericburns/Developer/Repos/gist-lang/node_modules/.bin/tsc -p /Users/ericburns/Developer/Repos/gist-lang/packages/gist-cli/tsconfig.json)",
+      "Bash(rm -rf /tmp/gist-smoketest)",
+      "Bash(mkdir -p /tmp/gist-smoketest)",
+      "Read(//tmp/**)",
+      "Bash(rm -rf /tmp/gist-regress)",
+      "Bash(mkdir -p /tmp/gist-regress)",
+      "Bash(ls basic/.gist)",
+      "Bash(/Users/ericburns/Developer/Repos/gist-lang/node_modules/.bin/vitest run *)",
+      "Bash(/Users/ericburns/Developer/Repos/gist-lang/node_modules/.bin/tsc -b packages/gist-parser packages/gist-workspace packages/gist-formatter packages/gist-lsp packages/gist-cli)"
     ]
   }
 }

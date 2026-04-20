@@ -53,6 +53,10 @@ npm install -g @gist-lang/cli
 # Scaffold a new project with AI agent integration
 gist init my-app --language typescript --agent claude-code
 
+# Or: bootstrap directly from a natural-language description
+gist init my-app --agent claude-code --prompt "a bookmark manager with tags and search"
+# Then run /gist.gistify in your agent to populate gist.yaml + .gist files
+
 # Write your specs, then validate
 gist check
 
@@ -73,7 +77,8 @@ The `gist` CLI is the primary interface for working with GIST projects.
 
 | Command | Description |
 |---------|-------------|
-| `gist init [name]` | Scaffold a new project (gist.yaml + starter .gist file) |
+| `gist init [name]` | Scaffold a new project (gist.yaml + starter .gist file). Use `--prompt "..."` to stage a natural-language description for `/gist.gistify`. |
+| `gist gistify [prompt...]` | Stage a natural-language prompt for `/gist.gistify` to consume. Supports `--file` and `--stdin`. |
 | `gist check [files...]` | Validate .gist files for syntax and semantic errors |
 | `gist fmt [files...]` | Format .gist files (normalize indentation, spacing, blank lines) |
 | `gist kit list` | List available and installed kits |
@@ -138,9 +143,11 @@ The `packages/` directory contains the GIST toolchain, built as a pnpm monorepo:
 
 ## How It Works
 
-1. **Write** a `gist.yaml` (infrastructure) and `.gist` files (behavior)
-2. **Validate** with `gist check --checklist` (syntax + spec quality)
-3. **Generate** via AI agent slash commands (`/gist.generate`) or `gist bundle` for manual LLM prompting
+1. **Bootstrap** (optional) — describe the project in prose with `gist init --prompt "..."` and run `/gist.gistify` to produce the initial `gist.yaml` + `.gist` files
+2. **Refine** — capture principles with `/gist.constitution`, close gaps with `/gist.revise`
+3. **Write / edit** the `gist.yaml` (infrastructure) and `.gist` files (behavior) directly
+4. **Validate** with `gist check --checklist` (syntax + spec quality)
+5. **Generate** via AI agent slash commands (`/gist.generate`) or `gist bundle` for manual LLM prompting
 
 GIST is **paradigm-agnostic** — the core spec handles models, types, intents, events, state machines, and testing. Kits add domain-specific constructs. Anyone can [create a kit](docs/GIST-kit-authoring.md).
 
@@ -156,6 +163,9 @@ This installs markdown instruction files that teach your AI agent the GIST workf
 
 | Slash Command | Purpose |
 |---------------|---------|
+| `/gist.gistify` | Bootstrap or augment a project from a natural-language description (populates gist.yaml + starter `.gist`) |
+| `/gist.constitution` | Capture project principles as `always:` invariants and `conventions:` in gist.yaml |
+| `/gist.revise` | Ask targeted questions to close gaps in the spec and patch files in place |
 | `/gist.generate` | Parse specs, generate production code following the GIST interpreter pipeline |
 | `/gist.validate` | Run spec quality checks and suggest improvements |
 | `/gist.plan` | Analyze specs and produce an implementation plan |

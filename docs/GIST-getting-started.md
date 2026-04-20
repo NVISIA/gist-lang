@@ -37,6 +37,16 @@ This creates:
 - `bookmarks.gist` — a starter spec file
 - `.claude/commands/` — AI agent slash commands for code generation
 
+**Tip:** you can also bootstrap from a natural-language description — the CLI stages your prompt, and `/gist.gistify` populates the files for you:
+
+```bash
+gist init bookmarks --agent claude-code --prompt "a bookmark manager with tags and search"
+# Then, in Claude Code:
+#   /gist.gistify
+```
+
+See [Bootstrapping from a prompt](#bootstrapping-from-a-prompt) below.
+
 ### Step 2: Write the manifest
 
 Edit `gist.yaml` to describe your infrastructure:
@@ -218,6 +228,57 @@ This assembles all project inputs into a single prompt you can paste into any LL
 
 ---
 
+## Bootstrapping from a prompt
+
+If you would rather start from a one-paragraph description than write `gist.yaml` and `.gist` files by hand, use the **gistify flow**. The CLI never calls an LLM itself — it stages your prompt, and the AI agent does the generation via slash commands.
+
+### Stage your intent
+
+Pick one of these paths:
+
+```bash
+# Option A — as part of init
+gist init my-app --agent claude-code --prompt "a bookmark manager with tags and search"
+
+# Option B — in an existing project
+gist gistify "a CLI tool for taking markdown notes with tag-based retrieval"
+
+# Option C — longer prompt from a file
+gist gistify --file prompt.txt
+
+# Option D — piped from stdin
+cat prompt.txt | gist gistify --stdin
+```
+
+Each of these writes `.gist/intent.md` inside the project, then tells you which skill to run next.
+
+### Run the skills
+
+Inside your AI agent (Claude Code, Cursor, Copilot, etc.), run the three skills as needed:
+
+| Skill | When to use it |
+|-------|----------------|
+| `/gist.gistify` | First pass — reads `.gist/intent.md` (or takes a prompt arg) and populates `gist.yaml` + a starter `.gist` file. On a populated project it asks whether to *replace*, *augment*, or *abort*. |
+| `/gist.constitution` | Capture principles — writes `always:` invariants into the project header and fills `conventions:` in `gist.yaml`. No separate constitution file is created. |
+| `/gist.revise` | Close gaps — asks targeted questions about under-specified intents (missing `fails:`/`guard:`/`eg:`, vague `do:` blocks) and patches the files in place. |
+
+### Typical flow
+
+```bash
+gist init bookmarks --agent claude-code --prompt "..."
+# In Claude Code:
+#   /gist.gistify        → generates gist.yaml + bookmarks.gist
+#   /gist.constitution   → adds always: and conventions:
+#   /gist.revise         → interactive cleanup pass
+gist check               # back in the terminal
+# In Claude Code:
+#   /gist.generate       → produces the actual project code
+```
+
+You can skip any of these — they are tools, not a required pipeline. `/gist.gistify` alone is enough to get a usable spec.
+
+---
+
 ## Key Concepts in 5 Minutes
 
 ### Models are data shapes
@@ -302,6 +363,8 @@ Kits add domain-specific keywords without changing the core spec. Built-in kits:
 | Command | Description |
 |---------|-------------|
 | `gist init [name]` | Scaffold a new project |
+| `gist init --prompt "..."` | Scaffold and stage a natural-language prompt for `/gist.gistify` |
+| `gist gistify [prompt...]` | Stage a prompt in an existing project (also supports `--file` and `--stdin`) |
 | `gist check [files...]` | Validate syntax and semantics |
 | `gist check --checklist` | Include spec quality checks |
 | `gist fmt [files...]` | Format .gist files |

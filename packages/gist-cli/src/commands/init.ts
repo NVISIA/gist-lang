@@ -94,15 +94,17 @@ export function registerInitCommand(program: Command): void {
     .option('--framework <name>', 'framework (e.g. nextjs, fastapi)')
     .option('--kit <kits...>', 'kits to include (e.g. api, web)')
     .option('--agent <name>', `AI agent to install skills for (${AGENT_IDS.join(', ')})`)
+    .option('--prompt <text>', 'natural-language project description to stage for /gist.gistify')
     .option('--yes', 'skip interactive prompts and use defaults')
     .action(async (name: string | undefined, opts: {
       language?: string;
       framework?: string;
       kit?: string[];
       agent?: string;
+      prompt?: string;
       yes?: boolean;
     }) => {
-      const hasFlags = !!(opts.language || opts.kit || opts.agent || opts.yes);
+      const hasFlags = !!(opts.language || opts.kit || opts.agent || opts.prompt || opts.yes);
       const isInteractive = !hasFlags && process.stdin.isTTY;
 
       if (isInteractive) {
@@ -162,6 +164,13 @@ async function runInteractiveInit(nameArg: string | undefined): Promise<void> {
           message: 'Which AI coding agent do you use?',
           options: AGENTS,
         }),
+
+      prompt: () =>
+        clack.text({
+          message: 'Describe your project (optional, for /gist.gistify)',
+          placeholder: 'e.g. a bookmark manager with tags and search',
+          defaultValue: '',
+        }),
     },
     {
       onCancel() {
@@ -176,6 +185,7 @@ async function runInteractiveInit(nameArg: string | undefined): Promise<void> {
   const framework = project.framework as string | undefined;
   const kits = project.kits as string[];
   const agent = project.agent as AgentId | 'skip';
+  const promptText = ((project.prompt as string | undefined) ?? '').trim();
   const targetDir = nameArg ? path.resolve(process.cwd(), nameArg) : process.cwd();
 
   // Create directory if needed
@@ -215,6 +225,13 @@ async function runInteractiveInit(nameArg: string | undefined): Promise<void> {
     agentResult = { installed: result.installed, config };
   }
 
+  // 4. Staged intent for /gist.gistify
+  let intentPath: string | undefined;
+  if (promptText.length > 0) {
+    intentPath = writeIntent(targetDir, promptText);
+    createdFiles.push(path.relative(targetDir, intentPath));
+  }
+
   s.stop('Project files created');
 
   // ── Summary ───────────────────────────────────────────────
@@ -237,14 +254,25 @@ async function runInteractiveInit(nameArg: string | undefined): Promise<void> {
 
   // ── Next steps ────────────────────────────────────────────
 
-  const nextSteps = [
-    `Edit ${BOLD}${path.relative(process.cwd(), gistPath)}${RESET} to define your spec`,
-    `Run ${BOLD}gist check${RESET} to validate`,
-  ];
+  const nextSteps: string[] = [];
+
+  if (intentPath && agentResult?.config) {
+    nextSteps.push(
+      `Run ${BOLD}/${CYAN}gist.gistify${RESET} in ${agentResult.config.name} to populate the spec from your prompt`,
+    );
+  } else if (intentPath) {
+    nextSteps.push(
+      `Install agent skills (${BOLD}gist skills install --agent <name>${RESET}), then run ${BOLD}/${CYAN}gist.gistify${RESET}`,
+    );
+  } else {
+    nextSteps.push(`Edit ${BOLD}${path.relative(process.cwd(), gistPath)}${RESET} to define your spec`);
+  }
+
+  nextSteps.push(`Run ${BOLD}gist check${RESET} to validate`);
 
   if (agentResult?.config) {
     nextSteps.push(`Use ${BOLD}/${CYAN}gist.generate${RESET} in ${agentResult.config.name} to generate code`);
-  } else {
+  } else if (!intentPath) {
     nextSteps.push(`Run ${BOLD}gist skills install --agent <name>${RESET} to install AI agent skills`);
   }
 
@@ -257,7 +285,7 @@ async function runInteractiveInit(nameArg: string | undefined): Promise<void> {
 
 function runInit(
   name: string | undefined,
-  opts: { language?: string; framework?: string; kit?: string[]; agent?: string },
+  opts: { language?: string; framework?: string; kit?: string[]; agent?: string; prompt?: string },
 ): void {
   const projectName = name ?? path.basename(process.cwd());
   const targetDir = name ? path.resolve(process.cwd(), name) : process.cwd();
@@ -311,21 +339,54 @@ function runInit(
     }
   }
 
+  // Stage intent for /gist.gistify if a prompt was provided
+  let intentPath: string | undefined;
+  const promptText = (opts.prompt ?? '').trim();
+  if (promptText.length > 0) {
+    intentPath = writeIntent(targetDir, promptText);
+    console.log(`  ${GREEN}+${RESET} ${path.relative(process.cwd(), intentPath)}`);
+  }
+
   console.log('');
   console.log(`${GREEN}✓${RESET} Project "${projectName}" initialized.`);
   console.log('');
   console.log('Next steps:');
-  console.log(`  1. Edit ${BOLD}${path.relative(process.cwd(), gistPath)}${RESET} to define your spec`);
-  console.log(`  2. Run ${BOLD}gist check${RESET} to validate`);
+
+  let step = 1;
+  if (intentPath && opts.agent) {
+    const agentId = opts.agent as AgentId;
+    const config = getAgentConfig(agentId);
+    console.log(`  ${step++}. Run ${BOLD}/${CYAN}gist.gistify${RESET} in ${config.name} to populate the spec from your prompt`);
+  } else if (intentPath) {
+    console.log(`  ${step++}. Install agent skills (${BOLD}gist skills install --agent <name>${RESET}), then run ${BOLD}/${CYAN}gist.gistify${RESET}`);
+  } else {
+    console.log(`  ${step++}. Edit ${BOLD}${path.relative(process.cwd(), gistPath)}${RESET} to define your spec`);
+  }
+
+  console.log(`  ${step++}. Run ${BOLD}gist check${RESET} to validate`);
 
   if (opts.agent) {
     const agentId = opts.agent as AgentId;
     const config = getAgentConfig(agentId);
-    console.log(`  3. Use ${BOLD}/${CYAN}gist.generate${RESET} in ${config.name} to generate code`);
-  } else {
-    console.log(`  3. Run ${BOLD}gist skills install --agent <name>${RESET} to install AI agent skills`);
+    console.log(`  ${step++}. Use ${BOLD}/${CYAN}gist.generate${RESET} in ${config.name} to generate code`);
+  } else if (!intentPath) {
+    console.log(`  ${step++}. Run ${BOLD}gist skills install --agent <name>${RESET} to install AI agent skills`);
     console.log(`     Supported: ${AGENT_IDS.join(', ')}`);
   }
+}
+
+/**
+ * Write a natural-language prompt to .gist/intent.md for /gist.gistify to consume.
+ */
+function writeIntent(targetDir: string, prompt: string): string {
+  const gistDir = path.join(targetDir, '.gist');
+  if (!fs.existsSync(gistDir)) {
+    fs.mkdirSync(gistDir, { recursive: true });
+  }
+  const intentPath = path.join(gistDir, 'intent.md');
+  const header = `# Intent\n\nStaged ${new Date().toISOString()}\n\n`;
+  fs.writeFileSync(intentPath, header + prompt.trim() + '\n', 'utf-8');
+  return intentPath;
 }
 
 // ─── File Builders ────────────────────────────────────────────

@@ -1,0 +1,1 @@
+{"root":["./src/gist-yaml-parser.ts","./src/index.ts","./src/kit-loader.ts","./src/kit-registry.ts","./src/project-discovery.ts","./src/types.ts","./src/analysis/symbol-table.ts","./src/analysis/validators.ts"],"version":"5.9.3"}

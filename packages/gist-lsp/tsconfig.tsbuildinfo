@@ -1,0 +1,1 @@
+{"root":["./src/index.ts","./src/server.ts","./src/features/code-actions.ts","./src/features/completion.ts","./src/features/definition.ts","./src/features/diagnostics.ts","./src/features/hover.ts","./src/features/references.ts","./src/features/rename.ts","./src/features/semantic-tokens.ts","./src/features/workspace-symbols.ts"],"version":"5.9.3"}

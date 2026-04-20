@@ -18,21 +18,59 @@ Scaffold a new GIST project.
 gist init my-app
 gist init my-app --language typescript --kit api web
 gist init my-app --agent claude-code
+gist init my-app --agent claude-code --prompt "a bookmark manager with tags and search"
 ```
 
 **Options:**
 | Flag | Description |
 |------|-------------|
 | `--language <lang>` | Primary language (e.g., `typescript`, `python`, `rust`) |
+| `--framework <name>` | Framework (e.g., `nextjs`, `fastapi`) |
 | `--kit <kits...>` | Kits to include (e.g., `api`, `web`, `cli`) |
 | `--agent <name>` | AI agent to install skills for |
+| `--prompt <text>` | Natural-language project description. Staged to `.gist/intent.md` for `/gist.gistify` to consume. |
+| `--yes` | Skip interactive prompts and use defaults |
 
 **Creates:**
 - `gist.yaml` — project manifest
 - `<name>.gist` — starter spec file with commented examples
 - Agent skill files (if `--agent` specified)
+- `.gist/intent.md` — staged prompt (if `--prompt` specified)
 
 **Supported agents:** `claude-code`, `cursor`, `copilot`, `windsurf`, `gemini`, `generic`
+
+---
+
+### `gist gistify [prompt...]`
+
+Stage a natural-language prompt for `/gist.gistify` to consume in your AI agent. The CLI does not call any LLM — it only writes the prompt to `.gist/intent.md` and prints the next step.
+
+```bash
+gist gistify "a CLI tool for taking markdown notes"
+gist gistify --file prompt.txt
+cat prompt.txt | gist gistify --stdin
+```
+
+**Options:**
+| Flag | Description |
+|------|-------------|
+| `-f, --file <path>` | Read the prompt from a file instead of arguments |
+| `--stdin` | Read the prompt from standard input |
+
+**Behavior:**
+- Creates `.gist/` if missing.
+- Writes `.gist/intent.md` with a short header and the prompt body.
+- Detects installed agents and names the one to use in the next step.
+- Errors (exit 1) if no prompt is provided and stdin is a TTY.
+
+**Typical flow:**
+```bash
+gist gistify "..."                   # stages the prompt
+# In Claude Code (or your agent):
+#   /gist.gistify                    # reads .gist/intent.md, writes gist.yaml + .gist
+#   /gist.constitution               # captures project principles
+#   /gist.revise                     # closes underspecification gaps
+```
 
 ---
 
@@ -181,6 +219,9 @@ Installs GIST workflow slash commands into your AI agent's configuration directo
 **Installed commands:**
 | Command | Purpose |
 |---------|---------|
+| `gist.gistify` | Bootstrap or augment a project from a natural-language prompt (reads `.gist/intent.md` or takes a prompt arg). Prompts before overwriting a populated project. |
+| `gist.constitution` | Capture project principles as `always:` invariants and `conventions:` in `gist.yaml`. No separate constitution file is created. |
+| `gist.revise` | Close spec gaps — asks targeted questions about missing `fails:`/`guard:`/`eg:` clauses and vague `do:` blocks, then patches the files. |
 | `gist.generate` | Read specs + interpreter rules, generate production code |
 | `gist.validate` | Run `gist check --checklist`, explain findings, suggest fixes |
 | `gist.plan` | Analyze specs, produce implementation plan |
@@ -220,13 +261,17 @@ Collects: interpreter spec + gist.yaml + kit files + all .gist files into a stru
 ## Developer Journey
 
 ```
-1. gist init my-app --agent claude-code    # scaffold project + install AI skills
-2. Edit *.gist files                        # write specs (with VS Code LSP support)
-3. gist check --checklist                   # validate syntax + spec quality
-4. gist fmt --write                         # format specs
-5. /gist.generate                           # AI agent generates code
-6. Edit specs, re-run                       # iterate
+1. gist init my-app --agent claude-code --prompt "..."    # scaffold + stage intent
+2. /gist.gistify                                            # AI populates gist.yaml + .gist
+3. /gist.constitution                                       # capture project principles (optional)
+4. /gist.revise                                             # close spec gaps (optional)
+5. gist check --checklist                                   # validate syntax + spec quality
+6. gist fmt --write                                         # format specs
+7. /gist.generate                                           # AI agent generates code
+8. Edit specs, re-run                                       # iterate
 ```
+
+Steps 1–4 can be replaced with hand-writing `gist.yaml` and `.gist` files if you prefer. The bootstrap skills are optional entry points — everything downstream works the same either way.
 
 ## Architecture
 
@@ -235,6 +280,7 @@ src/
   bin.ts                    # CLI entry point (commander)
   commands/
     init.ts                  # gist init — project scaffolding
+    gistify.ts               # gist gistify — stage NL prompt for /gist.gistify
     check.ts                 # gist check — validation pipeline
     fmt.ts                   # gist fmt — code formatting
     kit.ts                   # gist kit — kit management (list, install, create, validate)

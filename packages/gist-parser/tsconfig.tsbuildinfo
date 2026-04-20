@@ -1,0 +1,1 @@
+{"root":["./src/index.ts","./src/ast/ast-nodes.ts","./src/ast/cst-to-ast.ts","./src/common/diagnostics.ts","./src/common/source-location.ts","./src/lexer/indent-tracker.ts","./src/lexer/lexer.ts","./src/lexer/tokens.ts","./src/parser/cst-nodes.ts","./src/parser/parser.ts"],"version":"5.9.3"}
