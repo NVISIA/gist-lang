@@ -4,11 +4,15 @@
   "description": "GIST — Generative Intent Specification Toolkit",
   "repository": {
     "type": "git",
-    "url": "https://github.com/gist-lang/gist-lang.git"
+    "url": "https://github.com/NVISIA/gist-lang.git"
   },
-  "homepage": "https://github.com/gist-lang/gist-lang",
-  "bugs": "https://github.com/gist-lang/gist-lang/issues",
+  "homepage": "https://github.com/NVISIA/gist-lang",
+  "bugs": "https://github.com/gNVISIA/gist-lang/issues",
   "license": "MIT",
+  "author": {
+    "name": "Eric Burns",
+    "url": "https://www.linkedin.com/in/eric-burns-b6758042/"
+  },
   "engines": {
     "node": ">=18.0.0"
   },

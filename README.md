@@ -1,8 +1,8 @@
 # GIST
 
-**Generative Intent Specification Toolkit** — a language for thinking out loud to machines.
+**Generative Intent Specification Toolkit** — write the intent. Ship the implementation.
 
-By [Eric Burns](https://www.linkedin.com/in/eric-burns-b6758042/)
+Created by [Eric Burns](https://www.linkedin.com/in/eric-burns-b6758042/)
 
 GIST is a semi-structured language for specifying software that any large language model can interpret into working code, infrastructure, or both. It sits between natural language prompts (too ambiguous) and traditional source code (too detailed). You write the gist. The LLM writes the implementation.
 
