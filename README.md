@@ -2,6 +2,8 @@
 
 **Generative Intent Specification Toolkit** — a language for thinking out loud to machines.
 
+By [Eric Burns](https://www.linkedin.com/in/eric-burns-b6758042/)
+
 GIST is a semi-structured language for specifying software that any large language model can interpret into working code, infrastructure, or both. It sits between natural language prompts (too ambiguous) and traditional source code (too detailed). You write the gist. The LLM writes the implementation.
 
 ```gist
@@ -133,6 +135,7 @@ Kits extend GIST with domain-specific keywords. Each kit is a directory with `ki
 | [mobile](kits/mobile/) | Mobile Apps | `screen`, `nav`, `gesture`, `sheet`, `toast` |
 | [iac](kits/iac/) | Infrastructure as Code | `resource`, `group`, `variable`, `output`, `data` |
 | [gamedev](kits/gamedev/) | Game Development | `scene`, `entity`, `component`, `system`, `input` |
+| [godot](kits/godot/) | Godot 4 Engine | `node`, `signal`, `autoload`, `resource`, `group` (extends `gamedev`) |
 
 Manage kits with the CLI: `gist kit list`, `gist kit install <name>`, `gist kit create <name>`.
 
@@ -141,6 +144,7 @@ Manage kits with the CLI: `gist kit list`, `gist kit install <name>`, `gist kit 
 | Example | Complexity | Stack | Features |
 |---------|-----------|-------|----------|
 | [bookmarks](examples/bookmarks/) | Simple | TypeScript, Fastify, SQLite | Models, CRUD, tests |
+| [pong](examples/pong/) | Medium | GDScript, Godot 4 | Godot kit, signals, autoloads, tunable rules, AI opponent |
 | [todo-app](examples/todo-app/) | Medium | Java, Spring Boot, React | State machines, web kit, sharing, events |
 | [deployer](examples/deployer/) | Complex | Rust | Multi-kit (cli + iac), flow sagas, rollback |
 
@@ -172,7 +176,7 @@ GIST is **paradigm-agnostic** — the core spec handles models, types, intents, 
 GIST integrates with AI coding agents through **slash command skills**:
 
 ```bash
-gist skills install --agent claude-code   # or cursor, copilot, windsurf, gemini
+gist skills install --agent claude-code   # or cursor, copilot, windsurf, gemini, generic
 ```
 
 This installs markdown instruction files that teach your AI agent the GIST workflow:
@@ -230,9 +234,9 @@ gist-lang/
     gist-kit-authoring.md         # kit creation guide
   templates/commands/             # slash command templates for AI agents
   kits/                          # built-in domain kits
-    api/  cli/  gamedev/  iac/  mobile/  web/
+    api/  cli/  gamedev/  godot/  iac/  mobile/  web/
   examples/                      # example projects
-    bookmarks/  todo-app/  deployer/
+    bookmarks/  deployer/  pong/  todo-app/
 ```
 
 ## Development
@@ -247,4 +251,4 @@ Requires Node.js 18+ and pnpm.
 
 ## License
 
-MIT
+MIT — © 2026 [Eric Burns](https://www.linkedin.com/in/eric-burns-b6758042/). See [LICENSE](LICENSE) for details.
