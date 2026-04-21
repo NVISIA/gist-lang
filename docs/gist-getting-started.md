@@ -18,7 +18,7 @@ GIST sits between natural language prompts (too ambiguous) and traditional sourc
 
 ```bash
 # Clone the monorepo and install dependencies
-git clone https://ebtechnet.com/public-access/gist-lang.git
+git clone https://github.com/NVISIA/gist-lang.git
 cd gist-lang
 pnpm install
 

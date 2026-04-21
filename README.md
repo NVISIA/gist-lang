@@ -52,7 +52,7 @@ Feed this to an LLM with the spec and interpreter instructions, and it generates
 
 ```bash
 # Clone the monorepo and install dependencies
-git clone https://ebtechnet.com/public-access/gist-lang.git
+git clone https://github.com/NVISIA/gist-lang.git
 cd gist-lang
 pnpm install
 

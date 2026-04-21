@@ -4,13 +4,13 @@ Command-line interface for [GIST](../../README.md) (Generative Intent Specificat
 
 ## Installation
 
-The CLI is part of the [gist-lang monorepo](https://ebtechnet.com/public-access/gist-lang) and depends on sibling workspace packages (`@gist-lang/parser`, `@gist-lang/workspace`, `@gist-lang/formatter`). Install by cloning and linking, not via a standalone npm package.
+The CLI is part of the [gist-lang monorepo](https://github.com/NVISIA/gist-lang) and depends on sibling workspace packages (`@gist-lang/parser`, `@gist-lang/workspace`, `@gist-lang/formatter`). Install by cloning and linking, not via a standalone npm package.
 
 **Prerequisites:** Node.js ≥ 18 and [pnpm](https://pnpm.io/) (`pnpm@10.30.1` is pinned via the root `packageManager` field).
 
 ```bash
 # Clone the monorepo and install dependencies
-git clone https://ebtechnet.com/public-access/gist-lang.git
+git clone https://github.com/NVISIA/gist-lang.git
 cd gist-lang
 pnpm install
 
