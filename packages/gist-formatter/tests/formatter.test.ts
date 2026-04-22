@@ -236,3 +236,23 @@ describe('example files', () => {
     });
   }
 });
+
+describe('format: cross-file imports', () => {
+  it('round-trips use … as alias exposing A, B', () => {
+    const source = 'use "./shared.gist" as shared exposing User, Session, Auditable\n';
+    const formatted = format(source);
+    expect(formatted).toContain('use "./shared.gist" as shared exposing User, Session, Auditable');
+  });
+
+  it('round-trips qualified type ref in field position', () => {
+    const source = 'Task = {\n  owner: shared.User\n}\n';
+    const formatted = format(source);
+    expect(formatted).toContain('owner: shared.User');
+  });
+
+  it('round-trips qualified spread', () => {
+    const source = 'Admin = {\n  ...shared.User\n  role: string\n}\n';
+    const formatted = format(source);
+    expect(formatted).toContain('...shared.User');
+  });
+});

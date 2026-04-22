@@ -1,7 +1,8 @@
 import type { Hover, Position } from 'vscode-languageserver/node';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
-import type { SymbolTable } from '@gist-lang/workspace';
+import type { SymbolTable, ProjectSymbolTable } from '@gist-lang/workspace';
 import type { KitRegistry } from '@gist-lang/workspace';
+import { getQualifiedRefAtPosition } from './definition.js';
 
 /**
  * Compute hover information for a word at the given position.
@@ -11,7 +12,30 @@ export function computeHover(
   position: Position,
   symbols: SymbolTable | undefined,
   kitRegistry: KitRegistry | null,
+  project?: ProjectSymbolTable,
 ): Hover | null {
+  // Qualified reference: resolve via project and render the target's decl.
+  const qualified = getQualifiedRefAtPosition(document, position);
+  if (qualified && project) {
+    if (qualified.part === 'alias') {
+      const imp = project.getImport(qualified.alias);
+      if (imp) {
+        const exposingInfo = imp.exposing
+          ? `exposing ${[...imp.exposing].join(', ')}`
+          : '(all symbols)';
+        return {
+          contents: {
+            kind: 'markdown',
+            value: `**\`${qualified.alias}\`** — Import alias\n\nTarget: \`${imp.rawTarget}\`\n\n${exposingInfo}`,
+          },
+        };
+      }
+    } else {
+      const hover = hoverForQualified(project, qualified.alias, qualified.name);
+      if (hover) return hover;
+    }
+  }
+
   const word = getWordAtPosition(document, position);
   if (!word) return null;
 
@@ -61,7 +85,12 @@ export function computeHover(
       }
     }
     if (model.spreads.length > 0) {
-      lines.push('', `Spreads: ${model.spreads.map(s => `\`...${s}\``).join(', ')}`);
+      lines.push(
+        '',
+        `Spreads: ${model.spreads
+          .map(s => `\`...${s.alias ? `${s.alias}.${s.name}` : s.name}\``)
+          .join(', ')}`,
+      );
     }
     return { contents: { kind: 'markdown', value: lines.join('\n') } };
   }
@@ -179,6 +208,7 @@ export function computeHover(
       if (intent.saves?.length) lines.push(`Saves: ${intent.saves.map(s => `\`${s}\``).join(', ')}`);
       if (intent.emits?.length) lines.push(`Emits: ${intent.emits.map(e => `\`${e}\``).join(', ')}`);
       if (intent.guard?.length) lines.push(`Guard: ${intent.guard.join(', ')}`);
+      appendExtensions(lines, project, word, entry.module);
       return { contents: { kind: 'markdown', value: lines.join('\n') } };
     }
   }
@@ -192,12 +222,12 @@ export function computeHover(
         return `${p.name}${type}`;
       }).join(', ');
       const ret = fn.returnType ? ` → ${formatTypeRef(fn.returnType)}` : '';
-      return {
-        contents: {
-          kind: 'markdown',
-          value: `**\`fn ${word}(${params})${ret}\`**\n\nModule: \`${entry.module}\``,
-        },
-      };
+      const lines: string[] = [
+        `**\`fn ${word}(${params})${ret}\`**`,
+        `Module: \`${entry.module}\``,
+      ];
+      appendExtensions(lines, project, word, entry.module);
+      return { contents: { kind: 'markdown', value: lines.join('\n') } };
     }
   }
 
@@ -268,6 +298,126 @@ function isWordChar(ch: string): boolean {
   return /[a-zA-Z0-9_]/.test(ch);
 }
 
+/** Render a hover for `alias.Name` by delegating to the imported file's decl. */
+function hoverForQualified(
+  project: ProjectSymbolTable,
+  alias: string,
+  name: string,
+): Hover | null {
+  const resolved = project.resolveTypeName({ alias, name });
+  if (!resolved) return null;
+
+  const lines: string[] = [];
+  switch (resolved.kind) {
+    case 'model': {
+      const model = resolved.decl as import('@gist-lang/parser').ModelDeclaration;
+      lines.push(`**\`${alias}.${name}\`** — Model (from \`${shortPath(resolved.sourceFile)}\`)`);
+      if (model.modifier) lines.push(`Modifier: \`${model.modifier}\``);
+      if (model.fields.length > 0) {
+        lines.push('', '**Fields:**');
+        for (const f of model.fields) {
+          const type = f.type ? formatTypeRef(f.type) : 'any';
+          const opt = f.optional ? '?' : '';
+          lines.push(`- \`${f.name}${opt}: ${type}\``);
+        }
+      }
+      if (model.spreads.length > 0) {
+        lines.push(
+          '',
+          `Spreads: ${model.spreads
+            .map(s => `\`...${s.alias ? `${s.alias}.${s.name}` : s.name}\``)
+            .join(', ')}`,
+        );
+      }
+      break;
+    }
+    case 'trait': {
+      const trait = resolved.decl as import('@gist-lang/parser').TraitDeclaration;
+      lines.push(`**\`${alias}.${name}\`** — Trait (from \`${shortPath(resolved.sourceFile)}\`)`);
+      if (trait.fields.length > 0) {
+        lines.push('', '**Fields:**');
+        for (const f of trait.fields) {
+          const type = f.type ? formatTypeRef(f.type) : 'any';
+          lines.push(`- \`${f.name}: ${type}\``);
+        }
+      }
+      break;
+    }
+    case 'type': {
+      const typeDecl = resolved.decl as import('@gist-lang/parser').TypeDeclaration;
+      const base = typeDecl.baseType ? formatTypeRef(typeDecl.baseType) : 'unknown';
+      lines.push(
+        `**\`${alias}.${name}\`** — Type alias (from \`${shortPath(resolved.sourceFile)}\`)`,
+        `Base: \`${base}\``,
+      );
+      break;
+    }
+    case 'enum': {
+      const enumDecl = resolved.decl as import('@gist-lang/parser').EnumDeclaration;
+      lines.push(
+        `**\`${alias}.${name}\`** — Enum (from \`${shortPath(resolved.sourceFile)}\`)`,
+        `Values: \`${enumDecl.values.join(' | ')}\``,
+      );
+      break;
+    }
+    case 'error': {
+      const errDecl = resolved.decl as import('@gist-lang/parser').ErrorDeclaration;
+      lines.push(`**\`${alias}.${name}\`** — Error (from \`${shortPath(resolved.sourceFile)}\`)`);
+      if (errDecl.fields.length > 0) {
+        lines.push('', '**Fields:**');
+        for (const f of errDecl.fields) {
+          const type = f.type ? formatTypeRef(f.type) : 'any';
+          lines.push(`- \`${f.name}: ${type}\``);
+        }
+      }
+      break;
+    }
+    default:
+      return null;
+  }
+  return { contents: { kind: 'markdown', value: lines.join('\n') } };
+}
+
+function shortPath(fsPath: string): string {
+  const parts = fsPath.split('/');
+  return parts[parts.length - 1] ?? fsPath;
+}
+
+/** Append an "Extended by" / "Refined by" section to hover lines, if any apply. */
+function appendExtensions(
+  lines: string[],
+  project: ProjectSymbolTable | undefined,
+  intentName: string,
+  moduleName?: string,
+): void {
+  if (!project) return;
+  const extensions = project.getExtensionsFor(intentName, moduleName);
+  if (extensions.length === 0) return;
+
+  const extends_ = extensions.filter(e => e.kind === 'extend');
+  const refines = extensions.filter(e => e.kind === 'refine');
+
+  if (extends_.length > 0) {
+    lines.push('', '---', '**Extended by:**');
+    for (const ext of extends_) {
+      lines.push(`- \`extend ${intentName}\` — _${shortPath(ext.sourceFile)}_`);
+      for (const proseLine of ext.body) {
+        lines.push(`  > ${proseLine}`);
+      }
+    }
+  }
+
+  if (refines.length > 0) {
+    lines.push('', '---', '**Refined by:**');
+    for (const ref of refines) {
+      lines.push(`- \`refine ${intentName}\` — _${shortPath(ref.sourceFile)}_`);
+      for (const proseLine of ref.body) {
+        lines.push(`  > ${proseLine}`);
+      }
+    }
+  }
+}
+
 /**
  * Format a TypeRef into a readable string.
  */
@@ -279,6 +429,9 @@ function formatTypeRef(ref: import('@gist-lang/parser').TypeRef): string {
       break;
     case 'named':
       base = ref.base.name;
+      break;
+    case 'qualified':
+      base = `${ref.base.alias}.${ref.base.name}`;
       break;
     case 'model_ref':
       base = `->${ref.base.target}`;

@@ -11,6 +11,7 @@ import type { Diagnostic } from '@gist-lang/parser';
 import { DiagnosticSeverity } from '@gist-lang/parser';
 import { emptySpan } from '@gist-lang/parser';
 import type { SymbolTable, RouteEntry } from './symbol-table.js';
+import type { ProjectSymbolTable } from './project-symbol-table.js';
 import type { KitRegistry } from '../kit-registry.js';
 
 // ─── Primitive type names ────────────────────────────────────
@@ -45,17 +46,20 @@ export function runAllValidators(
   symbols: SymbolTable,
   kitRegistry: KitRegistry | null,
   declaredKits: string[],
+  project: ProjectSymbolTable | null = null,
 ): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
 
   diagnostics.push(...checkDuplicateNames(symbols));
-  diagnostics.push(...checkTypeReferences(program, symbols));
+  diagnostics.push(...checkTypeReferences(program, symbols, project));
   diagnostics.push(...checkDuplicateRoutes(symbols));
   diagnostics.push(...checkModuleNeeds(program, symbols));
   diagnostics.push(...checkPurity(program));
-  diagnostics.push(...checkStateMachines(program, symbols));
+  diagnostics.push(...checkStateMachines(program, symbols, project));
   diagnostics.push(...checkUsesReferences(program, symbols));
-  diagnostics.push(...checkSpreads(program, symbols));
+  diagnostics.push(...checkSpreads(program, symbols, project));
+  diagnostics.push(...checkImports(project));
+  diagnostics.push(...checkExtendRefineTargets(program, symbols, project));
 
   if (kitRegistry) {
     diagnostics.push(...checkKitKeywords(program, kitRegistry, declaredKits));
@@ -100,7 +104,11 @@ function checkDuplicateNames(symbols: SymbolTable): Diagnostic[] {
 
 // ─── Type reference validation ───────────────────────────────
 
-function checkTypeReferences(program: GistProgram, symbols: SymbolTable): Diagnostic[] {
+function checkTypeReferences(
+  program: GistProgram,
+  symbols: SymbolTable,
+  project: ProjectSymbolTable | null,
+): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
 
   const checkTypeRef = (ref: TypeRef) => {
@@ -114,6 +122,16 @@ function checkTypeReferences(program: GistProgram, symbols: SymbolTable): Diagno
           ));
         }
         break;
+      case 'qualified': {
+        const resolved = project?.resolveTypeName({ alias: base.alias, name: base.name }) ?? null;
+        if (!resolved) {
+          diagnostics.push(warning(
+            base.nameSpan,
+            `Unresolved reference '${base.alias}.${base.name}'`,
+          ));
+        }
+        break;
+      }
       case 'model_ref':
         if (!symbols.models.has(base.target) && !symbols.isTypeName(base.target)) {
           diagnostics.push(warning(
@@ -258,7 +276,11 @@ function checkPurity(program: GistProgram): Diagnostic[] {
 
 // ─── State machine validation ────────────────────────────────
 
-function checkStateMachines(program: GistProgram, symbols: SymbolTable): Diagnostic[] {
+function checkStateMachines(
+  program: GistProgram,
+  symbols: SymbolTable,
+  project: ProjectSymbolTable | null,
+): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
 
   for (const sm of program.stateMachines) {
@@ -282,8 +304,16 @@ function checkStateMachines(program: GistProgram, symbols: SymbolTable): Diagnos
       if (model) {
         const fieldExists = model.fields.some(f => f.name === sm.forField) ||
           model.spreads.some(s => {
-            const trait = symbols.traits.get(s);
-            return trait?.fields.some(f => f.name === sm.forField);
+            if (s.alias) {
+              const resolved = project?.resolveTypeName({ alias: s.alias, name: s.name });
+              const decl = resolved?.decl;
+              if (decl && 'fields' in decl) {
+                return decl.fields.some(f => f.name === sm.forField);
+              }
+              return false;
+            }
+            const source = symbols.traits.get(s.name) ?? symbols.models.get(s.name);
+            return source?.fields.some(f => f.name === sm.forField) ?? false;
           });
         if (!fieldExists) {
           diagnostics.push(error(
@@ -340,15 +370,32 @@ function checkUsesReferences(program: GistProgram, symbols: SymbolTable): Diagno
 
 // ─── Spread validation ───────────────────────────────────────
 
-function checkSpreads(program: GistProgram, symbols: SymbolTable): Diagnostic[] {
+function checkSpreads(
+  program: GistProgram,
+  symbols: SymbolTable,
+  project: ProjectSymbolTable | null,
+): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
 
   for (const model of program.models) {
     for (const spread of model.spreads) {
-      if (!symbols.traits.has(spread)) {
+      if (spread.alias) {
+        const resolved = project?.resolveTypeName({ alias: spread.alias, name: spread.name });
+        if (!resolved) {
+          diagnostics.push(warning(
+            spread.nameSpan,
+            `Model '${model.name}' spreads '${spread.alias}.${spread.name}' which cannot be resolved`,
+          ));
+        } else if (resolved.kind !== 'trait' && resolved.kind !== 'model') {
+          diagnostics.push(warning(
+            spread.nameSpan,
+            `Spread target '${spread.alias}.${spread.name}' is a ${resolved.kind}, not a trait or model`,
+          ));
+        }
+      } else if (!symbols.traits.has(spread.name) && !symbols.models.has(spread.name)) {
         diagnostics.push(warning(
-          model.span,
-          `Model '${model.name}' spreads '${spread}' which is not a declared trait`,
+          spread.nameSpan,
+          `Model '${model.name}' spreads '${spread.name}' which is not a declared trait or model`,
         ));
       }
     }
@@ -356,12 +403,87 @@ function checkSpreads(program: GistProgram, symbols: SymbolTable): Diagnostic[] 
 
   for (const trait of program.traits) {
     for (const spread of trait.spreads) {
-      if (!symbols.traits.has(spread)) {
+      if (spread.alias) {
+        // Traits can only spread traits (not models), per first-pass scope.
+        const resolved = project?.resolveTypeName({ alias: spread.alias, name: spread.name });
+        if (!resolved) {
+          diagnostics.push(warning(
+            spread.nameSpan,
+            `Trait '${trait.name}' spreads '${spread.alias}.${spread.name}' which cannot be resolved`,
+          ));
+        } else if (resolved.kind !== 'trait') {
+          diagnostics.push(warning(
+            spread.nameSpan,
+            `Trait spread target '${spread.alias}.${spread.name}' is a ${resolved.kind}, not a trait`,
+          ));
+        }
+      } else if (!symbols.traits.has(spread.name)) {
         diagnostics.push(warning(
-          trait.span,
-          `Trait '${trait.name}' spreads '${spread}' which is not a declared trait`,
+          spread.nameSpan,
+          `Trait '${trait.name}' spreads '${spread.name}' which is not a declared trait`,
         ));
       }
+    }
+  }
+
+  return diagnostics;
+}
+
+// ─── Import diagnostics ──────────────────────────────────────
+
+function checkImports(project: ProjectSymbolTable | null): Diagnostic[] {
+  if (!project) return [];
+  return project.graph.diagnostics.get(project.currentFile) ?? [];
+}
+
+// ─── extend / refine target validation ───────────────────────
+
+function checkExtendRefineTargets(
+  program: GistProgram,
+  symbols: SymbolTable,
+  project: ProjectSymbolTable | null,
+): Diagnostic[] {
+  const diagnostics: Diagnostic[] = [];
+
+  for (const comp of program.compositions) {
+    if (comp.compositionKind !== 'extend' && comp.compositionKind !== 'refine') continue;
+    const target = comp.target;
+    if (!target) continue;
+
+    // Qualified target: alias.name → must resolve to an intent/fn in the target file.
+    if (target.includes('.')) {
+      const [alias, name] = target.split('.', 2) as [string, string];
+      const imp = project?.getImport(alias);
+      if (!imp?.targetPath) {
+        diagnostics.push(warning(
+          comp.span,
+          `'${comp.compositionKind}' target '${target}' is not resolvable — alias '${alias}' is not imported`,
+        ));
+        continue;
+      }
+      const targetSymbols = project!.graph.symbols.get(imp.targetPath);
+      const foundIntent = [...(targetSymbols?.intents.values() ?? [])]
+        .some(e => e.intent.name === name);
+      const foundFn = [...(targetSymbols?.fns.values() ?? [])]
+        .some(e => e.fn.name === name);
+      if (!foundIntent && !foundFn) {
+        diagnostics.push(warning(
+          comp.span,
+          `'${comp.compositionKind} ${target}' references an intent or fn that is not declared in '${imp.rawTarget}'`,
+        ));
+      }
+      continue;
+    }
+
+    // Bare target: look up by name across all local modules.
+    const found =
+      [...symbols.intents.values()].some(e => e.intent.name === target) ||
+      [...symbols.fns.values()].some(e => e.fn.name === target);
+    if (!found) {
+      diagnostics.push(warning(
+        comp.span,
+        `'${comp.compositionKind} ${target}' references an intent or fn that is not declared`,
+      ));
     }
   }
 

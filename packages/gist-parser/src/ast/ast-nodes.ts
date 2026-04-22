@@ -61,7 +61,7 @@ export interface CapabilityEntry extends AstNode {
 export interface TraitDeclaration extends AstNode {
   name: string;
   fields: FieldDeclaration[];
-  spreads: string[];
+  spreads: SpreadRef[];
   always?: string[];
 }
 
@@ -71,10 +71,18 @@ export interface ModelDeclaration extends AstNode {
   name: string;
   modifier?: 'ephemeral' | 'immutable';
   fields: FieldDeclaration[];
-  spreads: string[];
+  spreads: SpreadRef[];
   ttl?: string;
   retain?: string;
   always?: string[];
+}
+
+/** A `...Name` or `...alias.Name` field-spread reference. */
+export interface SpreadRef extends AstNode {
+  alias?: string;
+  name: string;
+  aliasSpan?: TextSpan;
+  nameSpan: TextSpan;
 }
 
 export interface FieldDeclaration extends AstNode {
@@ -314,6 +322,7 @@ export interface TypeRef extends AstNode {
 export type BaseTypeRef =
   | PrimitiveTypeRef
   | NamedTypeRef
+  | QualifiedTypeRef
   | ModelRefTypeRef
   | ErrorTypeRef
   | ResultTypeRef
@@ -328,6 +337,15 @@ export interface PrimitiveTypeRef extends AstNode {
 export interface NamedTypeRef extends AstNode {
   kind: 'named';
   name: string;
+}
+
+/** A `alias.TypeName` reference, resolved cross-file via imports. */
+export interface QualifiedTypeRef extends AstNode {
+  kind: 'qualified';
+  alias: string;
+  name: string;
+  aliasSpan: TextSpan;
+  nameSpan: TextSpan;
 }
 
 export interface ModelRefTypeRef extends AstNode {
@@ -365,6 +383,12 @@ export type CompositionNode =
 export interface UseNode extends AstNode {
   compositionKind: 'use';
   target: string;
+  alias?: string;
+  exposing?: ExposedName[];
+}
+
+export interface ExposedName extends AstNode {
+  name: string;
 }
 
 export interface ExtendNode extends AstNode {

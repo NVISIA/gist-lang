@@ -1,0 +1,26 @@
+project: cross_file_demo
+version: 0.1.0
+description: Cross-file imports demo — shared models referenced from app.gist
+
+runtime:
+  language: TypeScript
+  platform: Node.js
+  package_manager: pnpm
+
+framework:
+  name: Fastify
+
+database:
+  type: SQLite
+  orm: Drizzle
+  migrations: managed
+  connection:
+    env: DATABASE_URL
+
+api:
+  style: REST
+  prefix: /api
+
+conventions:
+  id_format: cuid
+  timestamps: ISO-8601-UTC

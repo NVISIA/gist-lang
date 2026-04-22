@@ -12,7 +12,7 @@ GIST sits between natural language prompts (too ambiguous) and traditional sourc
 
 ---
 
-## Install the CLI
+## Install
 
 **Prerequisites:** Node.js ≥ 18 and [pnpm](https://pnpm.io/) (this repo pins `pnpm@10.30.1` via `packageManager`).
 
@@ -27,6 +27,9 @@ pnpm build
 
 # Link the CLI onto your PATH as `gist`
 pnpm --filter @gist-lang/cli link --global
+
+# Verify
+gist --version
 ```
 
 This gives you the `gist` command with tools for scaffolding, validating, formatting, and managing GIST projects.
@@ -39,32 +42,85 @@ cd gist-lang && git pull && pnpm install && pnpm build
 
 ---
 
-## Your First GIST Project
+The rest of this guide walks through the four post-install flows in the same order you'll see them in the top [README](../README.md) and the [CLI reference](../packages/gist-cli/README.md). Throughout, `/gist.*` commands are **slash commands run inside your AI agent, not at the terminal.**
 
-Let's build a simple bookmark API — users save URLs with tags, and can search them.
+---
 
-### Step 1: Scaffold the project
+## Init (blank workspace)
 
-```bash
-gist init bookmarks --language typescript --agent claude-code
-```
+Start from a clean slate and author the spec by hand. This flow is for when you already know what you want to build and prefer direct control over the model and module shape.
 
-This creates:
-- `gist.yaml` — your infrastructure manifest
-- `bookmarks.gist` — a starter spec file
-- `.claude/commands/` — AI agent slash commands for code generation
+**Prerequisites:** none.
 
-**Tip:** you can also bootstrap from a natural-language description — the CLI stages your prompt, and `/gist.gistify` populates the files for you:
+### Scaffold the project
+
+Interactive (recommended for first-time users):
 
 ```bash
-gist init bookmarks --agent claude-code --prompt "a bookmark manager with tags and search"
-# Then, in Claude Code:
-#   /gist.gistify
+gist init bookmarks
 ```
 
-See [Bootstrapping from a prompt](#bootstrapping-from-a-prompt) below.
+You'll see something like:
 
-### Step 2: Write the manifest
+```
+? Project name: bookmarks
+? Primary language: typescript
+? Framework: fastify
+? Kits to include: api
+? AI agent for code generation: claude-code
+? Short description (optional):
+
+✓ created gist.yaml
+✓ created bookmarks.gist
+✓ installed 8 skills into .claude/commands/
+
+Next:
+  - Edit bookmarks.gist to declare your models and modules
+  - Run `gist check` to validate
+```
+
+Non-interactive (scripts / CI):
+
+```bash
+gist init bookmarks --yes --language typescript --framework fastify --kit api --agent claude-code
+```
+
+### What gets created
+
+Starter `bookmarks.gist`:
+
+```gist
+project bookmarks
+  > A short description of what this project does.
+  kit: api
+  stack: gist.yaml
+
+// Declare your models here:
+// User = {
+//   id: string, unique, generated, cuid
+//   email: string, unique
+// }
+
+// Declare your modules here:
+// module users
+//   to create(email: string) -> User
+//     do: create a user
+```
+
+Starter `gist.yaml`:
+
+```yaml
+project: bookmarks
+version: 0.1.0
+
+runtime:
+  language: typescript
+
+framework:
+  name: fastify
+```
+
+### Write the manifest
 
 Edit `gist.yaml` to describe your infrastructure:
 
@@ -122,7 +178,7 @@ conventions:
 
 This tells the LLM: build me a Fastify app in TypeScript with SQLite and JWT auth. Every service, database, and convention is declared here — not in the `.gist` file.
 
-### Step 3: Write the spec
+### Write the spec
 
 Edit `bookmarks.gist`:
 
@@ -199,100 +255,284 @@ test search_by_query
 
 That's it. ~60 lines of spec describe a complete API with validation, search, and tests.
 
-### Step 4: Validate your spec
+### Validate and format
 
 ```bash
 gist check
 ```
 
 ```
- bookmarks.gist — no issues found.
+✓ 1 file checked — no issues found.
 ```
 
-Run with `--checklist` for spec quality feedback:
+Add `--checklist` for spec-quality feedback (completeness, error handling, test coverage, guard coverage, underspecification):
 
 ```bash
 gist check --checklist
 ```
 
-This reports on completeness, error handling, test coverage, guard coverage, and underspecification.
-
-### Step 5: Format your spec
+Format in place before committing:
 
 ```bash
 gist fmt --write
 ```
 
-Normalizes indentation, spacing, and blank lines across all `.gist` files. Use `--check` in CI to enforce formatting.
+When you're happy with the spec, jump to [Generate code](#generate-code).
 
-### Step 6: Generate code
+---
 
-If you installed agent skills (via `--agent` in Step 1), use your AI agent's slash command:
+## Init from prompt + `/gist.constitution`
+
+Describe the project in natural language; let the agent generate the first draft; then codify invariants. Use this when you want to get from idea to working spec fast.
+
+**Prerequisites:** an AI agent with GIST skills installed. `gist init --agent <name>` handles this automatically. If you skipped `--agent` at init, run `gist skills install --agent <name>` now.
+
+### Step 1 — stage the intent
+
+```bash
+gist init bookmarks --agent claude-code --prompt "a bookmark manager with tags and full-text search"
+```
+
+This creates:
 
 ```
+bookmarks/
+  .gist/
+    intent.md          ← your prompt, timestamped
+  .claude/commands/     ← agent skill files (8 slash commands)
+  gist.yaml             ← minimal manifest; /gist.gistify will fill it in
+  bookmarks.gist        ← starter with comments; /gist.gistify will populate
+```
+
+Open `.gist/intent.md` to inspect what was staged:
+
+```markdown
+# Intent
+
+Staged 2026-04-21T16:04:23Z
+
+a bookmark manager with tags and full-text search
+```
+
+### Step 2 — materialize the spec
+
+Open your AI agent and run:
+
+```
+# run inside your AI agent, not at the terminal
+/gist.gistify
+```
+
+The agent reads `.gist/intent.md`, infers models / modules / routes from the prose, and writes them into `gist.yaml` and `bookmarks.gist`. A representative result:
+
+```gist
+project bookmarks
+  > Personal bookmark manager with tags and full-text search.
+  kit: api
+  stack: gist.yaml
+
+Tag = { id: string, unique, generated, cuid; name: string, unique }
+
+Bookmark = {
+  id: string, unique, generated, cuid
+  url: string
+  title: string
+  tags: -> Tag[]
+  created_at: datetime, generated
+}
+
+module bookmarks
+  to create(url: string, title: string, tags?: string[]) -> Bookmark | ValidationFailed
+    route: POST /bookmarks
+    saves: Bookmark, Tag
+    do: validate URL, create or find tags, create bookmark
+
+  to search(q: string) -> Bookmark[]
+    route: GET /bookmarks/search
+    do: full-text search across title and url
+```
+
+### Step 3 — codify principles
+
+```
+# run inside your AI agent, not at the terminal
+/gist.constitution
+```
+
+The agent walks through project invariants — code quality, testing standards, security/auth, data hygiene — and writes them into the project header's `always:` block plus `conventions:` in `gist.yaml`. Representative additions:
+
+```gist
+project bookmarks
+  > Personal bookmark manager with tags and full-text search.
+  kit: api
+  stack: gist.yaml
+
+  always:
+    URLs must be valid (http or https)
+    tags are lowercase and trimmed
+    every public intent must declare `guard:`
+    every `to` that writes must declare `fails:`
+```
+
+```yaml
+# added to gist.yaml
+conventions:
+  id_format: cuid
+  timestamps: ISO-8601-UTC
+  json_keys: camelCase
+  db_columns: snake_case
+```
+
+No separate "constitution" file is created — the invariants live in the files you already have, so they flow into code generation automatically.
+
+---
+
+## `/gist.gistify` — augment an existing project
+
+Use the same slash command against a populated workspace to add features (e.g. a new auth flow) without regenerating everything.
+
+**Prerequisites:** an AI agent with GIST skills installed.
+
+### Step 1 — stage the new intent
+
+```bash
+gist gistify "Add password reset with email tokens, 15-minute expiry"
+```
+
+Alternatives:
+
+```bash
+gist gistify --file notes.md            # read from a file
+cat notes.md | gist gistify --stdin     # pipe from stdin
+```
+
+Each overwrites `.gist/intent.md` with the new prompt.
+
+### Step 2 — run the slash command
+
+```
+# run inside your AI agent, not at the terminal
+/gist.gistify
+```
+
+On a populated workspace the slash command detects the existing files and asks:
+
+```
+The project is already populated. What would you like to do?
+  1. Replace — discard current specs, regenerate from scratch
+  2. Augment — add new models/modules alongside existing ones
+  3. Abort — leave everything unchanged
+Choose [1/2/3]:
+```
+
+Pick **Augment**. The agent writes new models/intents into your existing `.gist` file and shows you the diff before saving. A representative addition:
+
+```gist
+PasswordResetToken = {
+  id: string, unique, generated
+  user_id: -> User
+  token: string, secret
+  expires_at: datetime
+}
+
+module auth
+  to request_reset(email: string) -> void | NotFound
+    route: POST /auth/reset-request
+    saves: PasswordResetToken
+    emits: password_reset_requested
+    do: find user by email, generate token, email link, record expiry 15 minutes from now
+    fails: NotFound when no user with that email
+```
+
+---
+
+## `/gist.revise` — close spec gaps
+
+After any init flow, use `/gist.revise` to surface and fix underspecification.
+
+**Prerequisites:** an AI agent with GIST skills installed.
+
+### Step 1 — see the gaps
+
+```bash
+gist check --checklist
+```
+
+Sample output:
+
+```
+bookmarks.gist:
+
+  ⚠ Intent `bookmarks.delete` has no `fails:` clause
+      What happens if the bookmark doesn't exist?
+
+  ⚠ Intent `auth.request_reset` uses vague verb "email link"
+      Which service sends email? Is there a retry policy?
+
+  ⚠ Model `Bookmark` has no corresponding test
+      Add a `test create_bookmark` or similar coverage
+
+3 items to address.
+```
+
+### Step 2 — run the slash command
+
+```
+# run inside your AI agent, not at the terminal
+/gist.revise
+```
+
+The agent reads the checklist output and asks up to 5 focused questions:
+
+```
+Q1: For `bookmarks.delete`, what should happen if the bookmark
+    doesn't exist?
+    a) Return NotFound error
+    b) Silently succeed (idempotent)
+    c) Something else
+
+  > a
+
+Q2: For `auth.request_reset`, which email service should be used,
+    and what's the retry policy?
+
+  > use the `mailer` service from gist.yaml, retry 3x with backoff
+```
+
+It then surgically patches the affected `.gist` files:
+
+```diff
+   to delete(id: string) -> void | NotFound
+     route: DELETE /bookmarks/:id
+     do:
+       find bookmark, delete it and orphaned tags
++    fails: NotFound when no bookmark with that id
+```
+
+Loop `/gist.revise` until `gist check --checklist` is clean.
+
+---
+
+## Generate code
+
+Once your specs are clean, produce the project.
+
+**Via an AI agent** (if you installed skills):
+
+```
+# run inside your AI agent, not at the terminal
 /gist.generate
 ```
 
-The AI agent reads your specs, the interpreter instructions, and your manifest, then generates a complete project: routes, models, migrations, tests, Dockerfile, and README.
+The agent reads your specs, the interpreter instructions, and your manifest, then generates a complete project: routes, models, migrations, tests, Dockerfile, and README.
 
-**Alternative — manual LLM prompting:**
+**Manual LLM prompting** (any LLM, no skills needed):
 
 ```bash
 gist bundle --output prompt.md
 ```
 
 This assembles all project inputs into a single prompt you can paste into any LLM.
-
----
-
-## Bootstrapping from a prompt
-
-If you would rather start from a one-paragraph description than write `gist.yaml` and `.gist` files by hand, use the **gistify flow**. The CLI never calls an LLM itself — it stages your prompt, and the AI agent does the generation via slash commands.
-
-### Stage your intent
-
-Pick one of these paths:
-
-```bash
-# Option A — as part of init
-gist init my-app --agent claude-code --prompt "a bookmark manager with tags and search"
-
-# Option B — in an existing project
-gist gistify "a CLI tool for taking markdown notes with tag-based retrieval"
-
-# Option C — longer prompt from a file
-gist gistify --file prompt.txt
-
-# Option D — piped from stdin
-cat prompt.txt | gist gistify --stdin
-```
-
-Each of these writes `.gist/intent.md` inside the project, then tells you which skill to run next.
-
-### Run the skills
-
-Inside your AI agent (Claude Code, Cursor, Copilot, etc.), run the three skills as needed:
-
-| Skill | When to use it |
-|-------|----------------|
-| `/gist.gistify` | First pass — reads `.gist/intent.md` (or takes a prompt arg) and populates `gist.yaml` + a starter `.gist` file. On a populated project it asks whether to *replace*, *augment*, or *abort*. |
-| `/gist.constitution` | Capture principles — writes `always:` invariants into the project header and fills `conventions:` in `gist.yaml`. No separate constitution file is created. |
-| `/gist.revise` | Close gaps — asks targeted questions about under-specified intents (missing `fails:`/`guard:`/`eg:`, vague `do:` blocks) and patches the files in place. |
-
-### Typical flow
-
-```bash
-gist init bookmarks --agent claude-code --prompt "..."
-# In Claude Code:
-#   /gist.gistify        → generates gist.yaml + bookmarks.gist
-#   /gist.constitution   → adds always: and conventions:
-#   /gist.revise         → interactive cleanup pass
-gist check               # back in the terminal
-# In Claude Code:
-#   /gist.generate       → produces the actual project code
-```
-
-You can skip any of these — they are tools, not a required pipeline. `/gist.gistify` alone is enough to get a usable spec.
 
 ---
 
@@ -393,6 +633,7 @@ Kits add domain-specific keywords without changing the core spec. Built-in kits:
 | `gist kit validate [path]` | Validate kit structure |
 | `gist skills install --agent <name>` | Install AI agent skills |
 | `gist skills list` | Show installed skills |
+| `gist skills agents` | List supported AI agents and their config paths |
 | `gist bundle` | Assemble project into a prompt |
 
 See the [full CLI documentation](../packages/gist-cli/README.md) for all options and flags.
@@ -512,7 +753,7 @@ to send_message(channel_id, content) -> Message
 
 ## Next Steps
 
-- **Read the spec:** [gist-spec-v0.7.md](../spec/gist-spec-v0.7.md) — the full language reference
+- **Read the spec:** [gist-spec.md](../spec/gist-spec.md) — the full language reference
 - **Browse examples:** [examples/](../examples/) — todo app, bookmark API, deployer CLI
 - **Build a kit:** [gist-kit-authoring.md](gist-kit-authoring.md) — create your own domain extension
 - **Use the interpreter:** [gist-interpreter.md](../spec/gist-interpreter.md) — the system prompt for LLM code generation
@@ -520,4 +761,4 @@ to send_message(channel_id, content) -> Message
 
 ---
 
-*GIST Getting Started Guide — for use with GIST Language Specification v0.7*
+*GIST Getting Started Guide — for use with GIST Language Specification v0.8*

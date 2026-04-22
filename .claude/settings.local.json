@@ -45,7 +45,17 @@
       "Bash(pnpm -r test)",
       "Bash(pnpm test *)",
       "Bash(git filter-branch --env-filter ' *)",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "Bash(sed 's/shared\\\\.User/shared.Unknown/' app.gist)",
+      "Bash(echo \"---exit $?---\")",
+      "Bash(cp app.gist /tmp/app-backup.gist)",
+      "Bash(sed 's/owner: shared\\\\.User/owner: shared.Unknown/' app.gist)",
+      "Bash(cp /tmp/app-new.gist app.gist)",
+      "Bash(cp /tmp/app-backup.gist app.gist)",
+      "Bash(sed 's/ exposing User, Session, Auditable//' app.gist)",
+      "Bash(cp /tmp/app-wild.gist app.gist)",
+      "Bash(sed 's/ as shared exposing User, Session, Auditable//' app.gist)",
+      "Bash(cp /tmp/app-noalias.gist app.gist)"
     ]
   }
 }
