@@ -3,6 +3,7 @@ import { CodeActionKind } from 'vscode-languageserver/node';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
 import * as path from 'path';
 import type { SymbolTable, ProjectSymbolTable } from '@gist-lang/workspace';
+import type { UseNode } from '@gist-lang/parser';
 
 /**
  * Compute code actions (quick fixes) for diagnostics at the given range.
@@ -115,7 +116,7 @@ function createAutoImportAction(
 /** Build a TextEdit that appends `typeName` to an existing `use … exposing` list. */
 function extendExistingUse(
   document: TextDocument,
-  useNode: { span: { start: { line: number; character?: number; column?: number } }; exposing?: { name: string }[] },
+  useNode: UseNode,
   typeName: string,
 ): TextEdit | null {
   const text = document.getText();
@@ -126,24 +127,54 @@ function extendExistingUse(
 
   if (useNode.exposing && useNode.exposing.length > 0) {
     if (useNode.exposing.some(e => e.name === typeName)) return null; // already there
-    // Append ", <typeName>" to end of the line.
+    // Insert right after the last exposed name's span end. This sidesteps
+    // any trailing `//` comment or whitespace that `line.length` would land in.
+    const lastExposed = useNode.exposing[useNode.exposing.length - 1]!;
+    const { line: endLine, column: endCol } = lastExposed.span.end;
     return {
       range: {
-        start: { line: lineIdx, character: line.length },
-        end: { line: lineIdx, character: line.length },
+        start: { line: endLine, character: endCol },
+        end: { line: endLine, character: endCol },
       },
       newText: `, ${typeName}`,
     };
   }
 
-  // No exposing clause yet — append ` exposing <typeName>`.
+  // No exposing clause yet — append ` exposing <typeName>` before any
+  // trailing `//` comment (and before its leading whitespace).
+  const insertCol = columnBeforeTrailingComment(line);
   return {
     range: {
-      start: { line: lineIdx, character: line.length },
-      end: { line: lineIdx, character: line.length },
+      start: { line: lineIdx, character: insertCol },
+      end: { line: lineIdx, character: insertCol },
     },
     newText: ` exposing ${typeName}`,
   };
+}
+
+/**
+ * Return the column of the first character of a trailing `//` line comment,
+ * backed up past any whitespace between the code and the comment. If there
+ * is no trailing comment, return the length of the line's right-trimmed text.
+ * Ignores `//` sequences that appear inside string literals.
+ */
+function columnBeforeTrailingComment(line: string): number {
+  let inString = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"' && line[i - 1] !== '\\') {
+      inString = !inString;
+      continue;
+    }
+    if (!inString && ch === '/' && line[i + 1] === '/') {
+      // Back up past whitespace preceding the comment.
+      let j = i;
+      while (j > 0 && (line[j - 1] === ' ' || line[j - 1] === '\t')) j--;
+      return j;
+    }
+  }
+  // No trailing comment — trim trailing whitespace.
+  return line.replace(/\s+$/, '').length;
 }
 
 /** Find a line to insert a new `use` statement. Prefer below any existing `use`, else below project header, else top. */

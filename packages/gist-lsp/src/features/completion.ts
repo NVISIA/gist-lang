@@ -267,7 +267,9 @@ export function computeCompletions(
           ? CompletionItemKind.Enum
           : local?.traits.has(name)
             ? CompletionItemKind.Interface
-            : CompletionItemKind.TypeParameter;
+            : local?.errors.has(name)
+              ? CompletionItemKind.Event
+              : CompletionItemKind.TypeParameter;
       items.push({ label: name, kind, detail: `from ${alias}` });
     }
     return items;
@@ -292,7 +294,11 @@ export function computeCompletions(
     const targetAbsPath = resolveUsePath(rawTarget, project.currentFile);
     const targetSymbols = targetAbsPath ? project.graph.symbols.get(targetAbsPath) : null;
     if (targetSymbols) {
-      for (const name of targetSymbols.getAllTypeNames()) {
+      const exposableNames = [
+        ...targetSymbols.getAllTypeNames(),
+        ...targetSymbols.errors.keys(),
+      ];
+      for (const name of exposableNames) {
         if (alreadyListed.has(name)) continue;
         const kind = targetSymbols.models.has(name)
           ? CompletionItemKind.Class
@@ -300,7 +306,9 @@ export function computeCompletions(
             ? CompletionItemKind.Enum
             : targetSymbols.traits.has(name)
               ? CompletionItemKind.Interface
-              : CompletionItemKind.TypeParameter;
+              : targetSymbols.errors.has(name)
+                ? CompletionItemKind.Event
+                : CompletionItemKind.TypeParameter;
         items.push({ label: name, kind, detail: `from "${rawTarget}"` });
       }
       return items;

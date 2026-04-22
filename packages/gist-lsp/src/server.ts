@@ -197,7 +197,7 @@ connection.onDidChangeWatchedFiles((params) => {
 
     if (change.type === FileChangeType.Deleted) {
       fileEntryCache.delete(absPath);
-      removeFileFromGraph(importGraph, absPath);
+      removeFileFromGraph(importGraph, absPath, lazyLoadFile);
       astCache.delete(change.uri);
       symbolCache.delete(change.uri);
       projectCache.delete(change.uri);

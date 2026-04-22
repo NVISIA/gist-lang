@@ -48,7 +48,25 @@ export function computeReferences(
     locations.push(...collectCrossFileReferences(word, project, documents));
   }
 
-  return locations;
+  return dedupeLocations(locations);
+}
+
+/**
+ * Drop duplicate locations. A reference site can be picked up by more than
+ * one collection strategy (e.g. the declaration span from the symbol table
+ * plus the same span from a whole-word text scan), and duplicates are
+ * user-visible noise in "Find All References".
+ */
+function dedupeLocations(locations: Location[]): Location[] {
+  const seen = new Set<string>();
+  const out: Location[] = [];
+  for (const loc of locations) {
+    const key = `${loc.uri}:${loc.range.start.line}:${loc.range.start.character}-${loc.range.end.line}:${loc.range.end.character}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(loc);
+  }
+  return out;
 }
 
 /** Find references to a symbol when we already know its source file (for qualified-ref navigation). */
@@ -89,7 +107,7 @@ function findReferencesForSymbol(
 
   locations.push(...collectCrossFileReferences(name, projectAtSource(project, sourceFile), documents));
 
-  return locations;
+  return dedupeLocations(locations);
 }
 
 /** Build a view of the project table rooted at a different file (for cross-file walks). */

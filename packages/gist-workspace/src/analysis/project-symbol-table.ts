@@ -115,14 +115,19 @@ export class ProjectSymbolTable {
 
   /**
    * List exposed top-level symbols for a given alias (for LSP completion).
-   * Returns an empty list if the alias is unresolved.
+   * Returns an empty list if the alias is unresolved. Includes error
+   * declarations alongside models / enums / types / traits, since errors
+   * are legal in type-reference positions (`-> Result | NotFound`).
    */
   listAliasMembers(alias: string): string[] {
     const imp = resolveAlias(this.graph, this.currentFile, alias);
     if (!imp?.targetPath) return [];
     const targetSymbols = this.graph.symbols.get(imp.targetPath);
     if (!targetSymbols) return [];
-    const names = targetSymbols.getAllTypeNames();
+    const names = [
+      ...targetSymbols.getAllTypeNames(),
+      ...targetSymbols.errors.keys(),
+    ];
     if (imp.exposing) {
       return names.filter(n => imp.exposing!.has(n));
     }

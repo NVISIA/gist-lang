@@ -133,7 +133,8 @@ export function resolveAlias(
 /**
  * Incrementally rebuild the graph entries that depend on a single changed file.
  * Updates `programs`, `symbols`, `byFile`, and `diagnostics` for the changed
- * file, then re-runs cycle detection (cheap — the file graph is small).
+ * file AND for every file that imports it (so stale "unknown exposed name"
+ * and path-resolution diagnostics get refreshed). Re-runs cycle detection.
  */
 export function updateFileInGraph(
   graph: ImportGraph,
@@ -143,13 +144,87 @@ export function updateFileInGraph(
   graph.programs.set(entry.path, entry.program);
   graph.symbols.set(entry.path, entry.symbols);
 
+  const visited = new Set<string>();
+  rebuildFileEntry(graph, entry.path, loader, visited);
+
+  // Re-walk any direct importers of the changed file — their "unknown exposed
+  // name" / "Cannot resolve path" diagnostics may have become valid or invalid.
+  for (const importer of findImportersOf(graph, entry.path)) {
+    rebuildFileEntry(graph, importer, loader, visited);
+  }
+
+  redetectCycles(graph);
+}
+
+/**
+ * Remove a file from the graph entirely. Use when a .gist file is deleted on
+ * disk. Importers are re-walked so their diagnostics reflect the now-missing
+ * target (e.g. new "Cannot resolve import path" warnings).
+ */
+export function removeFileFromGraph(
+  graph: ImportGraph,
+  absPath: string,
+  loader?: FileLoader,
+): void {
+  // Snapshot importers BEFORE deletion — resolveUseNode depends on
+  // graph.programs to decide whether a target resolves.
+  const importers = findImportersOf(graph, absPath);
+
+  graph.programs.delete(absPath);
+  graph.symbols.delete(absPath);
+  graph.byFile.delete(absPath);
+  graph.diagnostics.delete(absPath);
+
+  const visited = new Set<string>([absPath]);
+  for (const importer of importers) {
+    rebuildFileEntry(graph, importer, loader, visited);
+  }
+
+  redetectCycles(graph);
+}
+
+/** Find every file in the graph that imports `targetPath` via any alias. */
+function findImportersOf(graph: ImportGraph, targetPath: string): string[] {
+  const importers: string[] = [];
+  for (const [file, imports] of graph.byFile) {
+    for (const imp of imports.values()) {
+      if (imp.targetPath === targetPath) {
+        importers.push(file);
+        break;
+      }
+    }
+  }
+  return importers;
+}
+
+/**
+ * Rebuild `byFile` + `diagnostics` for a single file in the graph. Assumes the
+ * file's `programs`/`symbols` entries are already current. `visited` guards
+ * against infinite recursion when importers form a cycle.
+ */
+function rebuildFileEntry(
+  graph: ImportGraph,
+  filePath: string,
+  loader: FileLoader | undefined,
+  visited: Set<string>,
+): void {
+  if (visited.has(filePath)) return;
+  visited.add(filePath);
+
+  const program = graph.programs.get(filePath);
+  if (!program) {
+    graph.byFile.delete(filePath);
+    graph.diagnostics.delete(filePath);
+    return;
+  }
+
   const diagnostics: Diagnostic[] = [];
   const imports = new Map<string, ResolvedImport>();
 
-  for (const comp of entry.program.compositions) {
+  for (const comp of program.compositions) {
     if (comp.compositionKind !== 'use') continue;
     const useNode = comp;
-    const resolved = resolveUseNode(useNode, entry.path, graph, loader, diagnostics);
+    const resolved = resolveUseNode(useNode, filePath, graph, loader, diagnostics);
     if (!resolved) continue;
 
     if (imports.has(resolved.aliasName)) {
@@ -195,33 +270,12 @@ export function updateFileInGraph(
     }
   }
 
-  graph.byFile.set(entry.path, imports);
-
-  // Clear stale cycle warnings from the prior pass; detectCycles re-adds them.
-  graph.diagnostics.set(entry.path, diagnostics);
-  // Recompute cycles globally (cheap — walks the already-built byFile graph).
-  // We also need to drop cycle diagnostics from OTHER files because they may
-  // reference a cycle that no longer exists.
-  for (const [file, diags] of graph.diagnostics) {
-    graph.diagnostics.set(
-      file,
-      diags.filter(d => !d.message.startsWith('Import cycle detected')),
-    );
-  }
-  detectCycles(graph);
+  graph.byFile.set(filePath, imports);
+  graph.diagnostics.set(filePath, diagnostics);
 }
 
-/**
- * Remove a file from the graph entirely. Use when a .gist file is deleted on
- * disk. Cycles that involved the file are cleared and recomputed.
- */
-export function removeFileFromGraph(graph: ImportGraph, absPath: string): void {
-  graph.programs.delete(absPath);
-  graph.symbols.delete(absPath);
-  graph.byFile.delete(absPath);
-  graph.diagnostics.delete(absPath);
-
-  // Drop stale cycle diagnostics that may reference the removed file.
+/** Drop stale cycle diagnostics across the graph and re-run cycle detection. */
+function redetectCycles(graph: ImportGraph): void {
   for (const [file, diags] of graph.diagnostics) {
     graph.diagnostics.set(
       file,

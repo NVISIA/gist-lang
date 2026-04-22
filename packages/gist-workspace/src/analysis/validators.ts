@@ -450,14 +450,38 @@ function checkExtendRefineTargets(
     const target = comp.target;
     if (!target) continue;
 
-    // Qualified target: alias.name → must resolve to an intent/fn in the target file.
+    // Dotted target: either same-file `module.intent` or cross-file `alias.intent`.
     if (target.includes('.')) {
-      const [alias, name] = target.split('.', 2) as [string, string];
-      const imp = project?.getImport(alias);
+      const [prefix, name] = target.split('.', 2) as [string, string];
+
+      // Same-file module-qualified target takes precedence when the prefix
+      // matches a locally declared module (e.g. `extend tasks.create`).
+      if (symbols.modules.has(prefix)) {
+        const qualName = `${prefix}.${name}`;
+        const found = symbols.intents.has(qualName) || symbols.fns.has(qualName);
+        if (!found) {
+          diagnostics.push(warning(
+            comp.span,
+            `'${comp.compositionKind} ${target}' references an intent or fn that is not declared in module '${prefix}'`,
+          ));
+        }
+        continue;
+      }
+
+      // Otherwise, treat the prefix as an import alias (cross-file target).
+      const imp = project?.getImport(prefix);
       if (!imp?.targetPath) {
         diagnostics.push(warning(
           comp.span,
-          `'${comp.compositionKind}' target '${target}' is not resolvable — alias '${alias}' is not imported`,
+          `'${comp.compositionKind}' target '${target}' is not resolvable — '${prefix}' is neither a local module nor an imported alias`,
+        ));
+        continue;
+      }
+      // Respect selective imports: an `exposing` clause gates the name.
+      if (imp.exposing && !imp.exposing.has(name)) {
+        diagnostics.push(warning(
+          comp.span,
+          `'${comp.compositionKind} ${target}' — '${name}' is not listed in the 'exposing' clause of '${imp.rawTarget}'`,
         ));
         continue;
       }
