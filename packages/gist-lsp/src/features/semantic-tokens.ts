@@ -23,6 +23,7 @@ export const TOKEN_TYPES = [
   'enumMember',    // 11 - Enum values
   'modifier',      // 12 - Field modifiers (generated, unique, etc.)
   'method',        // 13 - HTTP methods (GET, POST, etc.)
+  'namespace',     // 14 - Import aliases (the `shared` in `shared.User`)
 ] as const;
 
 export const TOKEN_MODIFIERS = [
@@ -52,6 +53,7 @@ const TT_FUNCTION = 10;
 const TT_ENUM_MEMBER = 11;
 const TT_MODIFIER = 12;
 const TT_METHOD = 13;
+const TT_NAMESPACE = 14;
 
 // Keywords that introduce declarations (the next identifier is a function/intent name)
 const DECL_KEYWORDS = new Set([
@@ -162,9 +164,13 @@ export function computeSemanticTokens(
       continue;
     }
 
-    // Identifiers
+    // Identifiers — color as namespace when part of a qualified `alias.TypeName` ref.
     if (tok.kind === TokenKind.IDENTIFIER) {
-      builder.push(line, char, length, TT_VARIABLE, 0);
+      if (isAliasInQualifiedRef(tokens, i)) {
+        builder.push(line, char, length, TT_NAMESPACE, 0);
+      } else {
+        builder.push(line, char, length, TT_VARIABLE, 0);
+      }
       continue;
     }
 
@@ -209,4 +215,31 @@ export function computeSemanticTokens(
   }
 
   return builder.build();
+}
+
+/** Return true if tokens[i] is an IDENTIFIER followed by DOT TYPE_NAME. */
+function isAliasInQualifiedRef(
+  tokens: readonly { kind: TokenKind }[],
+  i: number,
+): boolean {
+  const next = nextMeaningful(tokens, i + 1);
+  if (next === -1 || tokens[next]!.kind !== TokenKind.DOT) return false;
+  const after = nextMeaningful(tokens, next + 1);
+  if (after === -1) return false;
+  return tokens[after]!.kind === TokenKind.TYPE_NAME;
+}
+
+function nextMeaningful(tokens: readonly { kind: TokenKind }[], from: number): number {
+  for (let j = from; j < tokens.length; j++) {
+    const k = tokens[j]!.kind;
+    if (
+      k === TokenKind.INDENT ||
+      k === TokenKind.DEDENT ||
+      k === TokenKind.NEWLINE ||
+      k === TokenKind.LINE_COMMENT ||
+      k === TokenKind.BLOCK_COMMENT
+    ) continue;
+    return j;
+  }
+  return -1;
 }

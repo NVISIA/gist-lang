@@ -6,14 +6,29 @@ import {
   InitializeResult,
   TextDocumentSyncKind,
   DiagnosticSeverity as LspDiagnosticSeverity,
+  DidChangeWatchedFilesNotification,
+  FileChangeType,
   type Diagnostic as LspDiagnostic,
+  type DidChangeWatchedFilesRegistrationOptions,
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
+import * as fs from 'fs';
+import * as path from 'path';
 import { lex, parse, cstToAst, DiagnosticSeverity } from '@gist-lang/parser';
 import type { Diagnostic, GistProgram } from '@gist-lang/parser';
-import { discoverWorkspace, parseGistYaml, loadAllKits, KitRegistry } from '@gist-lang/workspace';
-import type { GistProjectConfig, WorkspaceInfo } from '@gist-lang/workspace';
+import {
+  discoverWorkspace,
+  parseGistYaml,
+  loadAllKits,
+  KitRegistry,
+  SymbolTable,
+  buildImportGraph,
+  updateFileInGraph,
+  removeFileFromGraph,
+  ProjectSymbolTable,
+} from '@gist-lang/workspace';
+import type { GistProjectConfig, WorkspaceInfo, FileEntry, ImportGraph } from '@gist-lang/workspace';
 import { computeSemanticDiagnostics } from './features/diagnostics.js';
 import { computeCompletions } from './features/completion.js';
 import { computeHover } from './features/hover.js';
@@ -24,7 +39,6 @@ import { prepareRename, computeRename } from './features/rename.js';
 import { computeCodeActions } from './features/code-actions.js';
 import { computeWorkspaceSymbols } from './features/workspace-symbols.js';
 import { format } from '@gist-lang/formatter';
-import type { SymbolTable } from '@gist-lang/workspace';
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
@@ -43,6 +57,34 @@ const astCache = new Map<string, GistProgram>();
 
 /** Cached symbol tables per document URI. */
 const symbolCache = new Map<string, SymbolTable>();
+
+/** Cached file entries keyed by absolute filesystem path (for import resolution). */
+const fileEntryCache = new Map<string, FileEntry>();
+
+/** Cached per-document ProjectSymbolTable. */
+const projectCache = new Map<string, ProjectSymbolTable>();
+
+/** Persistent workspace-wide import graph. Updated incrementally on file change. */
+let importGraph: ImportGraph | null = null;
+
+/** Lazily load a workspace file from disk for import graph resolution. */
+function lazyLoadFile(absPath: string): FileEntry | null {
+  if (fileEntryCache.has(absPath)) return fileEntryCache.get(absPath)!;
+  let source: string;
+  try {
+    source = fs.readFileSync(absPath, 'utf-8');
+  } catch {
+    return null;
+  }
+  const kitKeywords = kitRegistry.getAllKeywords();
+  const lexResult = lex(source, { kitKeywords: kitKeywords.size > 0 ? kitKeywords : undefined });
+  const parseResult = parse(lexResult.tokens);
+  const program = cstToAst(parseResult.cst);
+  const symbols = SymbolTable.build(program, projectConfig);
+  const entry: FileEntry = { path: absPath, program, symbols };
+  fileEntryCache.set(absPath, entry);
+  return entry;
+}
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {
   // Discover workspace from the root folder
@@ -114,6 +156,15 @@ function initWorkspace(rootPath: string): void {
     kitRegistry.addKit(kit);
   }
 
+  // Seed the persistent import graph with every .gist file on disk.
+  const seedEntries: FileEntry[] = [];
+  for (const p of workspaceInfo.gistFiles) {
+    const abs = path.resolve(p);
+    const entry = lazyLoadFile(abs);
+    if (entry) seedEntries.push(entry);
+  }
+  importGraph = buildImportGraph(seedEntries, lazyLoadFile);
+
   connection.console.log(
     `GIST workspace: ${workspaceInfo.gistFiles.length} .gist files, ` +
     `${kitRegistry.getLoadedKitNames().length} kits loaded ` +
@@ -121,9 +172,51 @@ function initWorkspace(rootPath: string): void {
   );
 }
 
+// After init, register a dynamic file watcher for `.gist` files so the server
+// sees new/deleted/externally-modified files without a restart. `gist.yaml`
+// and `kits/**` changes still require restart — tracked in ROADMAP.md.
+connection.onInitialized(() => {
+  const options: DidChangeWatchedFilesRegistrationOptions = {
+    watchers: [{ globPattern: '**/*.gist' }],
+  };
+  connection.client.register(DidChangeWatchedFilesNotification.type, options).catch(err => {
+    connection.console.warn(`Failed to register .gist file watcher: ${err}`);
+  });
+});
+
 // Re-validate on change
 documents.onDidChangeContent((change) => {
   validateDocument(change.document);
+});
+
+connection.onDidChangeWatchedFiles((params) => {
+  if (!importGraph) return;
+
+  for (const change of params.changes) {
+    const absPath = uriToFsPath(change.uri);
+
+    if (change.type === FileChangeType.Deleted) {
+      fileEntryCache.delete(absPath);
+      removeFileFromGraph(importGraph, absPath, lazyLoadFile);
+      astCache.delete(change.uri);
+      symbolCache.delete(change.uri);
+      projectCache.delete(change.uri);
+      continue;
+    }
+
+    // Created or Changed: invalidate + re-read from disk, update graph.
+    fileEntryCache.delete(absPath);
+    const entry = lazyLoadFile(absPath);
+    if (entry) {
+      updateFileInGraph(importGraph, entry, lazyLoadFile);
+    }
+  }
+
+  // Cross-file resolution may now produce different diagnostics for any open
+  // document. Re-validate every one.
+  for (const doc of documents.all()) {
+    validateDocument(doc);
+  }
 });
 
 function validateDocument(document: TextDocument): void {
@@ -142,14 +235,35 @@ function validateDocument(document: TextDocument): void {
   const ast = cstToAst(parseResult.cst);
   astCache.set(document.uri, ast);
 
-  // Phase 4: Semantic analysis
+  // Per-file SymbolTable
+  const symbols = SymbolTable.build(ast, projectConfig);
+  symbolCache.set(document.uri, symbols);
+
+  // Update the file entry cache with the current in-memory version so
+  // import resolution sees unsaved edits.
+  const fsPath = uriToFsPath(document.uri);
+  const entry: FileEntry = { path: fsPath, program: ast, symbols };
+  fileEntryCache.set(fsPath, entry);
+
+  // Incrementally update the persistent import graph: only the changed file's
+  // own entries are rewritten; other files' resolutions look up `graph.symbols`
+  // at query time, so they pick up the new state automatically.
+  if (!importGraph) {
+    importGraph = buildImportGraph([entry], lazyLoadFile);
+  } else {
+    updateFileInGraph(importGraph, entry, lazyLoadFile);
+  }
+  const project = new ProjectSymbolTable(importGraph, fsPath, symbols);
+  projectCache.set(document.uri, project);
+
+  // Phase 4: Semantic analysis (with cross-file resolution)
   const hasKits = kitRegistry.getLoadedKitNames().length > 0;
   const semantic = computeSemanticDiagnostics(
     ast,
     projectConfig,
     hasKits ? kitRegistry : null,
+    project,
   );
-  symbolCache.set(document.uri, semantic.symbols);
   allDiagnostics.push(...semantic.diagnostics);
 
   const lspDiagnostics: LspDiagnostic[] = allDiagnostics.map(convertDiagnostic);
@@ -181,12 +295,14 @@ connection.onCompletion((params) => {
   const document = documents.get(params.textDocument.uri);
   if (!document) return [];
   const symbols = symbolCache.get(params.textDocument.uri);
+  const project = projectCache.get(params.textDocument.uri);
   return computeCompletions(
     document,
     params.position,
     symbols,
     kitRegistry.getLoadedKitNames().length > 0 ? kitRegistry : null,
     projectConfig,
+    project,
   );
 });
 
@@ -196,11 +312,13 @@ connection.onHover((params) => {
   const document = documents.get(params.textDocument.uri);
   if (!document) return null;
   const symbols = symbolCache.get(params.textDocument.uri);
+  const project = projectCache.get(params.textDocument.uri);
   return computeHover(
     document,
     params.position,
     symbols,
     kitRegistry.getLoadedKitNames().length > 0 ? kitRegistry : null,
+    project,
   );
 });
 
@@ -221,7 +339,8 @@ connection.onDefinition((params) => {
   const document = documents.get(params.textDocument.uri);
   if (!document) return null;
   const symbols = symbolCache.get(params.textDocument.uri);
-  return computeDefinition(document, params.position, symbols);
+  const project = projectCache.get(params.textDocument.uri);
+  return computeDefinition(document, params.position, symbols, project);
 });
 
 // ─── Find References ────────────────────────────────────────
@@ -230,11 +349,14 @@ connection.onReferences((params) => {
   const document = documents.get(params.textDocument.uri);
   if (!document) return [];
   const symbols = symbolCache.get(params.textDocument.uri);
+  const project = projectCache.get(params.textDocument.uri);
   return computeReferences(
     document,
     params.position,
     symbols,
     params.context.includeDeclaration,
+    project,
+    uri => documents.get(uri),
   );
 });
 
@@ -251,7 +373,15 @@ connection.onRenameRequest((params) => {
   const document = documents.get(params.textDocument.uri);
   if (!document) return null;
   const symbols = symbolCache.get(params.textDocument.uri);
-  return computeRename(document, params.position, params.newName, symbols);
+  const project = projectCache.get(params.textDocument.uri);
+  return computeRename(
+    document,
+    params.position,
+    params.newName,
+    symbols,
+    project,
+    uri => documents.get(uri),
+  );
 });
 
 // ─── Code Actions ───────────────────────────────────────────
@@ -260,7 +390,8 @@ connection.onCodeAction((params) => {
   const document = documents.get(params.textDocument.uri);
   if (!document) return [];
   const symbols = symbolCache.get(params.textDocument.uri);
-  return computeCodeActions(document, params, symbols);
+  const project = projectCache.get(params.textDocument.uri);
+  return computeCodeActions(document, params, symbols, project);
 });
 
 // ─── Workspace Symbols ──────────────────────────────────────

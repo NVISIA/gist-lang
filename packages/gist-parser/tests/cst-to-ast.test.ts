@@ -59,7 +59,9 @@ describe('cst-to-ast: traits', () => {
 
   it('extracts trait with spread', () => {
     const ast = parseToAst(`trait Full {\n  ...Timestamped\n  name: string\n}`);
-    expect(ast.traits[0]!.spreads).toEqual(['Timestamped']);
+    expect(ast.traits[0]!.spreads).toHaveLength(1);
+    expect(ast.traits[0]!.spreads[0]!.name).toBe('Timestamped');
+    expect(ast.traits[0]!.spreads[0]!.alias).toBeUndefined();
     expect(ast.traits[0]!.fields).toHaveLength(1);
   });
 });
@@ -76,7 +78,9 @@ describe('cst-to-ast: models', () => {
     expect(model.fields[0]!.modifiers).toContain('cuid');
     expect(model.fields[1]!.name).toBe('email');
     expect(model.fields[1]!.modifiers).toContain('unique');
-    expect(model.spreads).toEqual(['Timestamped']);
+    expect(model.spreads).toHaveLength(1);
+    expect(model.spreads[0]!.name).toBe('Timestamped');
+    expect(model.spreads[0]!.alias).toBeUndefined();
   });
 
   it('extracts optional fields', () => {
@@ -272,6 +276,46 @@ describe('cst-to-ast: composition', () => {
     expect(ast.compositions[0]!.compositionKind).toBe('use');
     if (ast.compositions[0]!.compositionKind === 'use') {
       expect(ast.compositions[0]!.target).toBe('shared-auth');
+    }
+  });
+
+  it('extracts use with alias', () => {
+    const ast = parseToAst(`use "./shared.gist" as shared`);
+    const use = ast.compositions[0]!;
+    expect(use.compositionKind).toBe('use');
+    if (use.compositionKind === 'use') {
+      expect(use.alias).toBe('shared');
+      expect(use.exposing).toBeUndefined();
+    }
+  });
+
+  it('extracts use with exposing list', () => {
+    const ast = parseToAst(`use "./auth.gist" as auth exposing User, Session`);
+    const use = ast.compositions[0]!;
+    if (use.compositionKind === 'use') {
+      expect(use.alias).toBe('auth');
+      expect(use.exposing).toHaveLength(2);
+      expect(use.exposing![0]!.name).toBe('User');
+      expect(use.exposing![1]!.name).toBe('Session');
+    }
+  });
+
+  it('extracts qualified spread in model', () => {
+    const ast = parseToAst(`Task = {\n  ...auth.User\n  title: string\n}`);
+    const model = ast.models[0]!;
+    expect(model.spreads).toHaveLength(1);
+    expect(model.spreads[0]!.alias).toBe('auth');
+    expect(model.spreads[0]!.name).toBe('User');
+  });
+
+  it('extracts qualified type ref in field', () => {
+    const ast = parseToAst(`Task = {\n  owner: auth.User\n}`);
+    const field = ast.models[0]!.fields[0]!;
+    expect(field.type).toBeDefined();
+    expect(field.type!.base.kind).toBe('qualified');
+    if (field.type!.base.kind === 'qualified') {
+      expect(field.type!.base.alias).toBe('auth');
+      expect(field.type!.base.name).toBe('User');
     }
   });
 });

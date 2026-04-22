@@ -227,13 +227,10 @@ export class SymbolTable {
         }
       }
       for (const spread of m.spreads) {
-        // spreads are string names — we need to find their span in the AST
-        // The spread span is approximated from the model span
-        // For now we store a reference with a synthetic span from the model
         this.addReference({
-          name: spread,
+          name: spread.alias ? `${spread.alias}.${spread.name}` : spread.name,
           kind: 'spread_ref',
-          span: m.span, // approximate — individual spread spans aren't available
+          span: spread.nameSpan,
           context: m.name,
         });
       }
@@ -343,6 +340,13 @@ export class SymbolTable {
         span: typeRef.span,
         context,
       });
+    } else if (base.kind === 'qualified') {
+      this.addReference({
+        name: `${base.alias}.${base.name}`,
+        kind: 'type_ref',
+        span: base.nameSpan,
+        context,
+      });
     } else if (base.kind === 'model_ref') {
       this.addReference({
         name: base.target,
@@ -433,16 +437,18 @@ export class SymbolTable {
     return this.symbols;
   }
 
-  /** Get resolved fields for a model, including trait spreads. */
+  /** Get resolved fields for a model, including local trait/model spreads.
+   *  Cross-file spreads are resolved by ProjectSymbolTable, not here. */
   getResolvedFields(modelName: string): FieldDeclaration[] {
     const model = this.models.get(modelName);
     if (!model) return [];
 
     const fields = [...model.fields];
-    for (const spreadName of model.spreads) {
-      const trait = this.traits.get(spreadName);
-      if (trait) {
-        fields.push(...trait.fields);
+    for (const spread of model.spreads) {
+      if (spread.alias) continue; // cross-file — resolved elsewhere
+      const source = this.traits.get(spread.name) ?? this.models.get(spread.name);
+      if (source) {
+        fields.push(...source.fields);
       }
     }
     return fields;

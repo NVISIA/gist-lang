@@ -10,7 +10,10 @@ import {
   KitRegistry,
   SymbolTable,
   runAllValidators,
+  buildImportGraph,
+  ProjectSymbolTable,
 } from '@gist-lang/workspace';
+import type { FileEntry } from '@gist-lang/workspace';
 import { formatDiagnostics, formatDiagnosticsJson, countErrors } from '../util/reporter.js';
 import type { FileResult } from '../util/reporter.js';
 import { runChecklist, formatChecklist, formatChecklistJson } from '../analysis/checklist.js';
@@ -65,10 +68,12 @@ function runCheck(files: string[], opts: { format: string; checklist?: boolean }
     return 0;
   }
 
-  // Validate each file
+  // Validate each file — Pass A: parse + per-file symbol table
   const results: FileResult[] = [];
   const allAsts: GistProgram[] = [];
   const allSymbols: SymbolTable[] = [];
+  const preDiagnostics = new Map<string, Diagnostic[]>();
+  const fileEntries: FileEntry[] = [];
 
   for (const filePath of filesToCheck) {
     let source: string;
@@ -102,19 +107,31 @@ function runCheck(files: string[], opts: { format: string; checklist?: boolean }
     const ast = cstToAst(parseResult.cst);
     allAsts.push(ast);
 
-    // Phase 4: Semantic analysis
+    // Per-file SymbolTable
     const symbols = SymbolTable.build(ast, projectConfig);
     allSymbols.push(symbols);
-    const declaredKits = ast.project?.kit ?? [];
+
+    preDiagnostics.set(filePath, diagnostics);
+    fileEntries.push({ path: filePath, program: ast, symbols });
+  }
+
+  // Pass B: build import graph across files and run validators with it
+  const entriesByPath = new Map(fileEntries.map(e => [e.path, e]));
+  const importGraph = buildImportGraph(fileEntries, absPath => entriesByPath.get(absPath) ?? null);
+
+  for (const entry of fileEntries) {
+    const diagnostics = preDiagnostics.get(entry.path) ?? [];
+    const project = new ProjectSymbolTable(importGraph, entry.path, entry.symbols);
+    const declaredKits = entry.program.project?.kit ?? [];
     const semanticDiags = runAllValidators(
-      ast,
-      symbols,
+      entry.program,
+      entry.symbols,
       hasKits ? kitRegistry : null,
       declaredKits,
+      project,
     );
     diagnostics.push(...semanticDiags);
-
-    results.push({ file: filePath, diagnostics });
+    results.push({ file: entry.path, diagnostics });
   }
 
   // Output diagnostics

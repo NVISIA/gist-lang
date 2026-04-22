@@ -5,6 +5,7 @@ import { lex } from '../src/lexer/lexer.js';
 import { parse, type ParseResult } from '../src/parser/parser.js';
 import { CstKind, isCstNode, type CstNode } from '../src/parser/cst-nodes.js';
 import { TokenKind, type Token } from '../src/lexer/tokens.js';
+import { DiagnosticSeverity } from '../src/common/diagnostics.js';
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -359,9 +360,33 @@ test invalid_url_rejected
 describe('Parser: Composition', () => {
   it('parses use declaration', () => {
     const source = `use "shared/auth"\n`;
-    const { cst } = parseSource(source);
+    const { cst, diagnostics } = parseSource(source);
     const uses = findDescendants(cst, CstKind.UseDecl);
     expect(uses).toHaveLength(1);
+    // Missing 'as' clause is a Warning, not an Error, per warnings-only policy.
+    const warnings = diagnostics.filter(d => d.severity === DiagnosticSeverity.Warning);
+    expect(warnings.some(w => w.message.includes('as <alias>'))).toBe(true);
+  });
+
+  it('parses use with alias', () => {
+    const source = `use "./shared/auth.gist" as auth\n`;
+    const { cst, diagnostics } = parseSource(source);
+    const uses = findDescendants(cst, CstKind.UseDecl);
+    expect(uses).toHaveLength(1);
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('parses use with exposing list', () => {
+    const source = `use "./shared.gist" as shared exposing User, Session, Auditable\n`;
+    const { cst, diagnostics } = parseSource(source);
+    const uses = findDescendants(cst, CstKind.UseDecl);
+    expect(uses).toHaveLength(1);
+    expect(diagnostics).toHaveLength(0);
+    // Three exposed names are TYPE_NAME tokens in the CST
+    const typeTokens = uses[0]!.children.filter(
+      (c): c is Token => 'kind' in c && c.kind === TokenKind.TYPE_NAME
+    );
+    expect(typeTokens.map(t => t.text)).toEqual(['User', 'Session', 'Auditable']);
   });
 });
 

@@ -239,6 +239,10 @@ class Parser {
         children.push(this.parseOnHandler());
       } else if (token.kind === TokenKind.KW_USE) {
         children.push(this.parseUseDecl());
+      } else if (token.kind === TokenKind.KW_EXTEND) {
+        children.push(this.parseExtendDecl());
+      } else if (token.kind === TokenKind.KW_REFINE) {
+        children.push(this.parseRefineDecl());
       } else if (token.kind === TokenKind.KIT_KEYWORD) {
         children.push(this.parseKitConstruct());
       } else if (token.kind === TokenKind.TYPE_NAME) {
@@ -675,6 +679,16 @@ class Parser {
   private parseSpreadField(): CstNode {
     const children: CstChild[] = [];
     this.expect(TokenKind.SPREAD, children);
+    this.skipTrivia(children);
+    // Optional alias prefix: IDENTIFIER DOT before the TYPE_NAME
+    if (this.check(TokenKind.IDENTIFIER) &&
+        this.peekAhead(1).kind === TokenKind.DOT &&
+        this.peekAhead(2).kind === TokenKind.TYPE_NAME) {
+      children.push(this.advance()); // alias
+      this.skipTrivia(children);
+      children.push(this.advance()); // .
+      this.skipTrivia(children);
+    }
     this.expect(TokenKind.TYPE_NAME, children);
     return this.makeNode(CstKind.SpreadField, children);
   }
@@ -1723,6 +1737,18 @@ class Parser {
       return this.makeNode(CstKind.TypeRef, children);
     }
 
+    // Qualified type ref: alias.TypeName (IDENTIFIER DOT TYPE_NAME)
+    if (t.kind === TokenKind.IDENTIFIER &&
+        this.peekAhead(1).kind === TokenKind.DOT &&
+        this.peekAhead(2).kind === TokenKind.TYPE_NAME) {
+      children.push(this.advance()); // alias
+      this.skipTrivia(children);
+      children.push(this.advance()); // .
+      this.skipTrivia(children);
+      children.push(this.advance()); // TypeName
+      return this.makeNode(CstKind.TypeRef, children);
+    }
+
     // Named type (PascalCase)
     if (t.kind === TokenKind.TYPE_NAME) {
       children.push(this.advance());
@@ -1765,20 +1791,85 @@ class Parser {
 
   private parseUseDecl(): CstNode {
     const children: CstChild[] = [];
-    this.expect(TokenKind.KW_USE, children);
+    const useToken = this.expect(TokenKind.KW_USE, children);
     this.skipTrivia(children);
     if (this.check(TokenKind.STRING_LITERAL)) {
       children.push(this.advance());
     }
     this.skipTrivia(children);
+    let hasAlias = false;
     if (this.check(TokenKind.KW_AS)) {
       children.push(this.advance());
       this.skipTrivia(children);
       if (this.check(TokenKind.IDENTIFIER)) {
         children.push(this.advance());
+        hasAlias = true;
       }
     }
+    // Optional: exposing <Name>, <Name>, ...
+    this.skipTrivia(children);
+    if (this.check(TokenKind.KW_EXPOSING)) {
+      children.push(this.advance());
+      while (true) {
+        this.skipTrivia(children);
+        if (this.check(TokenKind.TYPE_NAME) || this.check(TokenKind.IDENTIFIER)) {
+          children.push(this.advance());
+        } else {
+          break;
+        }
+        this.skipTrivia(children);
+        if (this.check(TokenKind.COMMA)) {
+          children.push(this.advance());
+          continue;
+        }
+        break;
+      }
+    }
+    // Warn (not error) if alias was missing — keeps warnings-only policy
+    if (!hasAlias && useToken) {
+      this.diagnostics.push({
+        severity: DiagnosticSeverity.Warning,
+        message: `'use' declaration is missing 'as <alias>' clause — cross-file symbols cannot be referenced without an alias`,
+        span: useToken.span,
+      });
+    }
     return this.makeNode(CstKind.UseDecl, children);
+  }
+
+  /** Parse `extend <identifier>` followed by an INDENT prose block. */
+  private parseExtendDecl(): CstNode {
+    return this.parseExtendOrRefineDecl(TokenKind.KW_EXTEND, CstKind.ExtendDecl);
+  }
+
+  /** Parse `refine <identifier>` followed by an INDENT prose block. */
+  private parseRefineDecl(): CstNode {
+    return this.parseExtendOrRefineDecl(TokenKind.KW_REFINE, CstKind.RefineDecl);
+  }
+
+  private parseExtendOrRefineDecl(keyword: TokenKind, kind: CstKind): CstNode {
+    const children: CstChild[] = [];
+    this.expect(keyword, children);
+    this.skipTrivia(children);
+    // Target can be a bare identifier (local) or `alias.name` (qualified).
+    if (this.check(TokenKind.IDENTIFIER) &&
+        this.peekAhead(1).kind === TokenKind.DOT &&
+        this.peekAhead(2).kind === TokenKind.IDENTIFIER) {
+      children.push(this.advance()); // alias
+      this.skipTrivia(children);
+      children.push(this.advance()); // .
+      this.skipTrivia(children);
+      children.push(this.advance()); // name
+    } else if (this.check(TokenKind.IDENTIFIER)) {
+      children.push(this.advance());
+    }
+    // Optional INDENT prose block
+    this.skipTrivia(children);
+    if (this.eat(TokenKind.INDENT, children)) {
+      const prose = this.collectProseBlock(children);
+      children.push(prose);
+      this.eat(TokenKind.DEDENT, children);
+    }
+    return this.makeNode(kind, children);
   }
 
   // ── Common Productions (Section 20) ─────────────────────

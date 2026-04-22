@@ -27,6 +27,145 @@ To update later:
 cd gist-lang && git pull && pnpm install && pnpm build
 ```
 
+Verify the install:
+
+```bash
+gist --version
+```
+
+---
+
+## Workflows
+
+Five paths cover every starting point. The order below matches the top [README](../../README.md) and the [Getting Started guide](../../docs/gist-getting-started.md). `/gist.*` commands are **slash commands run inside your AI agent, not at the terminal** — they ship with `gist skills install --agent <name>`.
+
+### Init (blank workspace)
+
+Start from a clean slate and author the spec by hand.
+
+**Prerequisites:** none.
+
+Interactive (recommended for first-time users):
+
+```bash
+gist init my-app
+```
+
+You'll be prompted for project name, language, framework, kits, and agent.
+
+Non-interactive (scripts / CI):
+
+```bash
+gist init my-app \
+  --yes \
+  --language typescript \
+  --framework fastify \
+  --kit api \
+  --agent claude-code
+```
+
+**Creates:**
+- `gist.yaml` — project manifest with language/framework/kits filled in.
+- `my-app.gist` — starter spec file with commented example models and modules.
+- Agent skill files in the agent's config directory (if `--agent` was specified).
+
+**Next:** open `my-app.gist` in your editor, declare your models and modules, then `gist check` to validate.
+
+---
+
+### Init from prompt + `/gist.constitution`
+
+Describe the project in natural language, let the agent generate the first draft, then codify invariants.
+
+**Prerequisites:** an AI agent with GIST skills installed. `gist init --agent <name>` handles this automatically, or run `gist skills install --agent <name>` separately.
+
+**Step 1 — stage the intent:**
+
+```bash
+gist init my-app \
+  --agent claude-code \
+  --prompt "a bookmark manager with tags and full-text search"
+```
+
+This creates `.gist/intent.md` containing your prompt (timestamped), plus the agent skills on disk. No `.gist` file contents are generated yet.
+
+**Step 2 — materialize the spec** (slash command, run inside your agent):
+
+```
+# run inside your AI agent, not at the terminal
+/gist.gistify
+```
+
+The agent reads `.gist/intent.md`, infers models / modules / routes from the prose, and writes them into `gist.yaml` and `my-app.gist`.
+
+**Step 3 — codify principles** (slash command):
+
+```
+# run inside your AI agent, not at the terminal
+/gist.constitution
+```
+
+The agent walks through project invariants (code quality, testing, security/auth, data hygiene) and writes them into the project header's `always:` block plus `conventions:` in `gist.yaml`. No separate constitution file is created — the invariants land in the files you already have.
+
+**Next:** `gist check --checklist`, then iterate with `/gist.revise` (below).
+
+---
+
+### `/gist.gistify` — augment an existing project
+
+Same slash command as step 2 above, but applied to a populated workspace. Use this to add features (e.g. a new auth flow) without regenerating everything.
+
+**Prerequisites:** an AI agent with GIST skills installed.
+
+**Step 1 — stage the new intent:**
+
+```bash
+gist gistify "Add password reset with email tokens, 15-minute expiry"
+# or: gist gistify --file notes.md
+# or: cat notes.md | gist gistify --stdin
+```
+
+This overwrites `.gist/intent.md` with the new prompt.
+
+**Step 2 — run the slash command in your agent:**
+
+```
+# run inside your AI agent, not at the terminal
+/gist.gistify
+```
+
+On a populated workspace the slash command detects the existing files and asks whether to:
+- **Replace** — discard current specs, regenerate from scratch,
+- **Augment** — add new models/modules alongside the existing ones (typical answer), or
+- **Abort** — leave everything unchanged.
+
+---
+
+### `/gist.revise` — close spec gaps
+
+Use after any init flow to surface and fix underspecification.
+
+**Prerequisites:** an AI agent with GIST skills installed.
+
+**Step 1 — see the gaps:**
+
+```bash
+gist check --checklist
+```
+
+The checklist flags under-specified `do:` blocks, missing `fails:` / `guard:` / `eg:` clauses, vague verbs, and test-coverage holes.
+
+**Step 2 — run the slash command in your agent:**
+
+```
+# run inside your AI agent, not at the terminal
+/gist.revise
+```
+
+The agent reads the checklist output, asks up to 5 focused questions (e.g. *"What should `delete_user` do if the user has active sessions?"*), and surgically patches the affected `.gist` files. Loop until `gist check --checklist` is clean.
+
+---
+
 ## Commands
 
 ### `gist init [name]`

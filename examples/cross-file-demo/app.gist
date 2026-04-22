@@ -1,0 +1,26 @@
+project cross_file_demo_app
+  > Task app that reuses User, Session, and Auditable from shared.gist.
+  stack: gist.yaml
+
+use "./shared.gist" as shared exposing User, Session, Auditable
+
+Task = {
+  id: string, unique, generated, cuid
+  owner: shared.User
+  title: string
+  done: bool
+  ...shared.Auditable
+}
+
+Admin = {
+  ...shared.User
+  role: string
+}
+
+module tasks
+  > CRUD operations on tasks.
+
+  to create(owner: shared.User, title: string) -> Task
+    route: POST /tasks
+    saves: Task
+    do: create a Task owned by owner with the given title

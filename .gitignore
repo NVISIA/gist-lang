@@ -8,6 +8,9 @@ Thumbs.db
 *.swp
 *.swo
 
+# Claude Code (per-developer overrides)
+.claude/settings.local.json
+
 # Node (if testing examples)
 node_modules/
 dist/

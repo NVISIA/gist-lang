@@ -5,8 +5,59 @@ import {
   Position,
 } from 'vscode-languageserver/node';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
-import type { SymbolTable } from '@gist-lang/workspace';
+import type { SymbolTable, ProjectSymbolTable } from '@gist-lang/workspace';
 import type { KitRegistry, GistProjectConfig } from '@gist-lang/workspace';
+import * as path from 'path';
+import * as fs from 'fs';
+
+/** Resolve a raw `use "…"` target relative to the importing file. */
+function resolveUsePath(rawTarget: string, importingFile: string): string | null {
+  const dir = path.dirname(importingFile);
+  const candidate = path.resolve(dir, rawTarget);
+  if (candidate.endsWith('.gist')) return candidate;
+  return candidate + '.gist';
+}
+
+/** Produce filesystem path completions for a partial `use "…"` target. */
+function pathCompletionItems(partial: string, importingFile: string): CompletionItem[] {
+  const items: CompletionItem[] = [];
+  const importingDir = path.dirname(importingFile);
+
+  // Split into directory portion + prefix of filename to match.
+  const slashIdx = partial.lastIndexOf('/');
+  const dirPortion = slashIdx >= 0 ? partial.slice(0, slashIdx + 1) : '';
+  const namePrefix = slashIdx >= 0 ? partial.slice(slashIdx + 1) : partial;
+  const searchDir = path.resolve(importingDir, dirPortion || '.');
+
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(searchDir, { withFileTypes: true });
+  } catch {
+    return items;
+  }
+
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue;
+    if (!entry.name.startsWith(namePrefix)) continue;
+    if (entry.isDirectory()) {
+      items.push({
+        label: entry.name + '/',
+        kind: CompletionItemKind.Folder,
+        insertText: entry.name + '/',
+      });
+    } else if (entry.isFile() && entry.name.endsWith('.gist')) {
+      // Don't suggest the file being edited.
+      const candidateAbs = path.resolve(searchDir, entry.name);
+      if (candidateAbs === importingFile) continue;
+      items.push({
+        label: entry.name,
+        kind: CompletionItemKind.File,
+        insertText: entry.name,
+      });
+    }
+  }
+  return items;
+}
 
 // ─── Context detection ──────────────────────────────────────
 
@@ -195,9 +246,76 @@ export function computeCompletions(
   symbols: SymbolTable | undefined,
   kitRegistry: KitRegistry | null,
   config: GistProjectConfig | null,
+  project?: ProjectSymbolTable,
 ): CompletionItem[] {
-  const context = detectContext(document, position);
   const items: CompletionItem[] = [];
+
+  // Qualified-reference completion: if the cursor is immediately after `<alias>.`,
+  // offer the imported symbols.
+  const currentLine = document.getText().split('\n')[position.line] ?? '';
+  const beforeCursor = currentLine.slice(0, position.character);
+  const qualMatch = beforeCursor.match(/([a-z_][a-zA-Z0-9_]*)\.$/);
+  if (qualMatch && project) {
+    const alias = qualMatch[1]!;
+    for (const name of project.listAliasMembers(alias)) {
+      const local = project.graph.symbols.get(
+        project.getImport(alias)?.targetPath ?? '',
+      );
+      const kind = local?.models.has(name)
+        ? CompletionItemKind.Class
+        : local?.enums.has(name)
+          ? CompletionItemKind.Enum
+          : local?.traits.has(name)
+            ? CompletionItemKind.Interface
+            : local?.errors.has(name)
+              ? CompletionItemKind.Event
+              : CompletionItemKind.TypeParameter;
+      items.push({ label: name, kind, detail: `from ${alias}` });
+    }
+    return items;
+  }
+
+  // Path completion inside the string literal of a `use "…"` statement.
+  const usePathMatch = beforeCursor.match(/^\s*use\s+"([^"]*)$/);
+  if (usePathMatch && project) {
+    const partial = usePathMatch[1]!;
+    items.push(...pathCompletionItems(partial, project.currentFile));
+    return items;
+  }
+
+  // Exposing-list completion: inside `use "…" as <alias> exposing …`, offer the
+  // top-level names from the target file.
+  const useMatch = beforeCursor.match(/^\s*use\s+"([^"]+)"\s+as\s+(\w+)\s+exposing\s+([\w\s,]*)$/);
+  if (useMatch && project) {
+    const rawTarget = useMatch[1]!;
+    const alreadyListed = new Set(
+      (useMatch[3] ?? '').split(',').map(s => s.trim()).filter(Boolean),
+    );
+    const targetAbsPath = resolveUsePath(rawTarget, project.currentFile);
+    const targetSymbols = targetAbsPath ? project.graph.symbols.get(targetAbsPath) : null;
+    if (targetSymbols) {
+      const exposableNames = [
+        ...targetSymbols.getAllTypeNames(),
+        ...targetSymbols.errors.keys(),
+      ];
+      for (const name of exposableNames) {
+        if (alreadyListed.has(name)) continue;
+        const kind = targetSymbols.models.has(name)
+          ? CompletionItemKind.Class
+          : targetSymbols.enums.has(name)
+            ? CompletionItemKind.Enum
+            : targetSymbols.traits.has(name)
+              ? CompletionItemKind.Interface
+              : targetSymbols.errors.has(name)
+                ? CompletionItemKind.Event
+                : CompletionItemKind.TypeParameter;
+        items.push({ label: name, kind, detail: `from "${rawTarget}"` });
+      }
+      return items;
+    }
+  }
+
+  const context = detectContext(document, position);
 
   switch (context) {
     case 'top_level':

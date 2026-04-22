@@ -1,6 +1,6 @@
 # GIST Formal Grammar
 
-EBNF notation for the GIST language (v0.7). This grammar defines the structural skeleton that an LLM or parser can validate. Prose blocks within behavior are intentionally left as opaque strings — GIST is semi-structured by design.
+EBNF notation for the GIST language (v0.8). This grammar defines the structural skeleton that an LLM or parser can validate. Prose blocks within behavior are intentionally left as opaque strings — GIST is semi-structured by design.
 
 ---
 
@@ -391,11 +391,19 @@ FieldList          = FieldDecl { ',' FieldDecl } ;
 ## 19. Composition
 
 ```ebnf
-UseDecl            = 'use' <string_literal> 'as' <identifier> ;
+UseDecl            = 'use' <string_literal> 'as' <identifier> [ ExposingClause ] ;
+ExposingClause     = 'exposing' ExposedName { ',' ExposedName } ;
+ExposedName        = <TYPE_NAME> | <identifier> ;
 ExtendDecl         = 'extend' <identifier> INDENT <prose> DEDENT ;
 RefineDecl         = 'refine' <identifier> INDENT <prose> DEDENT ;
 PassDecl           = 'pass' 'to' <dotted_name> '(' [ ArgList ] ')' ;
 ```
+
+Type references in §5 (traits), §6 (models), and anywhere a `BaseType` is
+permitted also accept a qualified form `<identifier> '.' <TYPE_NAME>`,
+resolved via the `use … as` alias declared in the importing file. The
+`SpreadField` production (`'...' <TYPE_NAME>`) is extended to
+`'...' [ <identifier> '.' ] <TYPE_NAME>` for cross-file spread.
 
 ---
 

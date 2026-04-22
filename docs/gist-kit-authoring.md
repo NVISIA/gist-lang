@@ -545,4 +545,4 @@ constructs:                    # IDE metadata (see spec §12.7)
 
 ---
 
-*Kit Authoring Guide — for use with GIST Language Specification v0.7*
+*Kit Authoring Guide — for use with GIST Language Specification v0.8*

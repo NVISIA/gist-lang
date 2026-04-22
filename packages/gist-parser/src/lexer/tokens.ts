@@ -129,6 +129,7 @@ export enum TokenKind {
   KW_EXTEND = 'KW_EXTEND',         // extend
   KW_REFINE = 'KW_REFINE',         // refine
   KW_PASS = 'KW_PASS',             // pass
+  KW_EXPOSING = 'KW_EXPOSING',     // exposing
 
   // ── Keywords: Scheduling ────────────────────────────────
   KW_EVERY = 'KW_EVERY',           // every
@@ -275,6 +276,7 @@ export const KEYWORDS: ReadonlyMap<string, TokenKind> = new Map([
   ['extend', TokenKind.KW_EXTEND],
   ['refine', TokenKind.KW_REFINE],
   ['pass', TokenKind.KW_PASS],
+  ['exposing', TokenKind.KW_EXPOSING],
 
   // Scheduling
   ['every', TokenKind.KW_EVERY],

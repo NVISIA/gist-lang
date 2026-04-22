@@ -48,44 +48,79 @@ Feed this to an LLM with the spec and interpreter instructions, and it generates
 
 ## Quick Start
 
+Five paths. Pick the one that matches what you're doing. `/gist.*` commands are slash commands run inside your AI agent, not at the terminal.
+
+### 1. Install
+
 > **Prerequisites:** Node.js ≥ 18 and [pnpm](https://pnpm.io/) (this repo pins `pnpm@10.30.1` via `packageManager`).
 
 ```bash
-# Clone the monorepo and install dependencies
 git clone https://github.com/NVISIA/gist-lang.git
 cd gist-lang
 pnpm install
-
-# Build the CLI (and the workspace packages it depends on)
 pnpm build
-
-# Link the CLI onto your PATH as `gist`
 pnpm --filter @gist-lang/cli link --global
-
-# Scaffold a new project with AI agent integration
-gist init my-app --language typescript --agent claude-code
-
-# Or: bootstrap directly from a natural-language description
-gist init my-app --agent claude-code --prompt "a bookmark manager with tags and search"
-# Then run /gist.gistify in your agent to populate gist.yaml + .gist files
-
-# Write your specs, then validate
-gist check
-
-# Format your .gist files
-gist fmt --write
-
-# Generate code via your AI agent's slash command
-# /gist.generate
+gist --version
 ```
 
-To update later, pull and rebuild:
+Full instructions → [CLI README § Installation](packages/gist-cli/README.md#installation)
+
+### 2. Init a blank workspace
+
+Start from a clean slate and author specs by hand.
+
+```bash
+gist init my-app                                        # interactive
+# or
+gist init my-app --yes --language typescript --kit api  # scripted
+```
+
+Walkthrough → [CLI README § Init (blank workspace)](packages/gist-cli/README.md#init-blank-workspace)
+
+### 3. Init from a prompt (with `/gist.constitution`)
+
+Describe the project; let the agent generate the first draft; codify invariants.
+
+```bash
+gist init my-app --agent claude-code --prompt "a bookmark manager with tags and search"
+# then, inside your agent:
+#   /gist.gistify        → materializes gist.yaml + .gist from .gist/intent.md
+#   /gist.constitution   → codifies invariants into always:/conventions:
+```
+
+Walkthrough → [CLI README § Init from prompt + /gist.constitution](packages/gist-cli/README.md#init-from-prompt--gistconstitution)
+
+### 4. Augment an existing project with `/gist.gistify`
+
+Add new features to a populated workspace.
+
+```bash
+gist gistify "Add password reset with email tokens, 15-minute expiry"
+# then, inside your agent:
+#   /gist.gistify        → asks replace / augment / abort; augment is typical
+```
+
+Walkthrough → [CLI README § /gist.gistify — augment an existing project](packages/gist-cli/README.md#gistgistify--augment-an-existing-project)
+
+### 5. Close spec gaps with `/gist.revise`
+
+Surface and fix underspecification after any of the above.
+
+```bash
+gist check --checklist
+# then, inside your agent:
+#   /gist.revise         → up to 5 questions, surgically patches your .gist files
+```
+
+Walkthrough → [CLI README § /gist.revise — close spec gaps](packages/gist-cli/README.md#gistrevise--close-spec-gaps)
+
+To update the CLI later, pull and rebuild:
 
 ```bash
 cd gist-lang && git pull && pnpm install && pnpm build
 ```
 
-Read the [Getting Started Guide](docs/gist-getting-started.md) for a full walkthrough.
+Read the [Getting Started Guide](docs/gist-getting-started.md) for a full walkthrough with sample output.
 
 ---
 
@@ -105,6 +140,7 @@ The `gist` CLI is the primary interface for working with GIST projects.
 | `gist kit validate [path]` | Validate a kit.yaml for correctness |
 | `gist skills install` | Install AI agent slash commands |
 | `gist skills list` | Show installed skills |
+| `gist skills agents` | List all supported AI agents and their config paths |
 | `gist bundle` | Assemble all project inputs into a single prompt |
 
 See the [CLI Reference](packages/gist-cli/README.md) for full documentation.
@@ -115,7 +151,8 @@ See the [CLI Reference](packages/gist-cli/README.md) for full documentation.
 
 | Document | Description |
 |----------|-------------|
-| [Language Specification](spec/gist-spec-v0.7.md) | Full language reference (v0.7) |
+| [Language Specification](spec/gist-spec.md) | Full language reference |
+| [Roadmap](ROADMAP.md) | Planned and deferred features |
 | [Formal Grammar](spec/gist-grammar.md) | EBNF grammar for parsers and tooling |
 | [gist.yaml Spec](spec/gist-yaml-spec.md) | Infrastructure manifest reference |
 | [Interpreter Instructions](spec/gist-interpreter.md) | System prompt for LLM code generation |
@@ -225,7 +262,7 @@ gist-lang/
     gist-vscode/                  # VS Code extension
       syntaxes/                    # TextMate grammar
   spec/                          # language specification
-    gist-spec-v0.7.md             # core spec
+    gist-spec.md                  # core spec
     gist-grammar.md               # formal grammar (EBNF)
     gist-yaml-spec.md             # manifest spec
     gist-interpreter.md           # LLM system prompt

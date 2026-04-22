@@ -1,6 +1,15 @@
-# The GIST Language Specification v0.7
+# The GIST Language Specification
 
 *Generative Intent Specification Toolkit — a language for thinking out loud to machines.*
+
+**Version:** 0.8
+
+**Changes since 0.7**
+
+- `use` declarations now support an `exposing <Name>, …` clause for selective cross-file imports.
+- Type references and spread fields accept a qualified form (`alias.TypeName`) that resolves across imported files.
+- Model declarations may spread other models (not just traits), locally or via a qualified reference. This provides "inheritance" of fields without introducing a new keyword.
+- Cross-file resolution surfaces as Warnings, never Errors, so existing single-file specs stay clean.
 
 ---
 
@@ -645,7 +654,8 @@ module auth
 ## 11. Composition
 
 ```gist
-use "./shared/auth.gist" as auth      // import
+use "./shared/auth.gist" as auth                                // wildcard import
+use "./shared/billing.gist" as billing exposing Invoice, Plan   // selective import
 
 extend create_task                      // append behavior
   also log an activity entry
@@ -655,6 +665,47 @@ refine create_task                      // modify behavior
 
 pass to process_payment(payload)        // delegate
 ```
+
+**`use "path" as alias`** — imports a sibling `.gist` file. The alias is
+required; it namespaces the imported declarations so bare names can never
+collide. The path is resolved relative to the importing file. If the path has
+no extension, `.gist` is auto-appended.
+
+**`exposing <Name>, <Name>, …`** — *optional* selective clause. When present,
+only the listed names are visible via the alias; when omitted, every top-level
+symbol in the target file is visible (wildcard). `exposing` also drives the LSP
+auto-import quick-fix — editors suggest adding a bare-name reference to the
+list of an existing `use` declaration.
+
+Imported declarations are referenced via `alias.Name`. A qualified reference
+may appear anywhere a type reference is allowed, including field types, return
+types, parameter types, and `...` spread targets:
+
+```gist
+// In app.gist
+use "./shared.gist" as shared exposing User, Auditable
+
+Task = {
+  id: string, unique, generated
+  owner: shared.User        // qualified type reference
+  ...shared.Auditable       // qualified spread — pulls in shared fields
+}
+
+Admin = {
+  ...shared.User            // cross-file "inheritance" of fields
+  role: string
+}
+```
+
+Spreads are the inheritance mechanism: a model may spread any trait OR model
+(local or qualified) to flatten its fields into the current declaration. This
+keeps the language surface minimal — no separate `extends` keyword.
+
+Unresolved imports, unknown exposed names, cycle detection, and alias
+collisions are emitted as **Warnings** rather than Errors, so existing
+single-file specs continue to validate cleanly. A `use` declaration without
+an `as` clause is also a Warning: symbols in that file cannot be referenced
+without an alias.
 
 ---
 
@@ -1049,4 +1100,4 @@ Concurrency (`parallel`, `await`, `race`), standard library (`use std/crud`), LL
 
 ---
 
-*GIST Language Specification v0.7 — Draft*
+*GIST Language Specification v0.8 — Draft*

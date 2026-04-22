@@ -43,6 +43,10 @@ import type {
   BaseTypeRef,
   CompositionNode,
   UseNode,
+  ExtendNode,
+  RefineNode,
+  ExposedName,
+  SpreadRef,
 } from './ast-nodes.js';
 
 // ─── Public API ───────────────────────────────────────────────
@@ -237,6 +241,12 @@ function transformProgram(cst: CstNode): GistProgram {
       case CstKind.UseDecl:
         program.compositions.push(transformUseDecl(child));
         break;
+      case CstKind.ExtendDecl:
+        program.compositions.push(transformExtendDecl(child));
+        break;
+      case CstKind.RefineDecl:
+        program.compositions.push(transformRefineDecl(child));
+        break;
       case CstKind.OnHandler:
         program.onHandlers.push(transformOnHandler(child));
         break;
@@ -365,12 +375,37 @@ function transformCapabilityEntry(node: CstNode): CapabilityEntry {
 
 // ─── Traits ───────────────────────────────────────────────────
 
+function extractSpreadRef(node: CstNode): SpreadRef {
+  // Walk non-trivia tokens looking for [IDENTIFIER DOT] TYPE_NAME.
+  // The SPREAD token is always first; we skip it.
+  const toks = tokens(node);
+  let alias: string | undefined;
+  let aliasSpan: TextSpan | undefined;
+  let name = '';
+  let nameSpan: TextSpan = node.span;
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i]!;
+    if (t.kind === TokenKind.IDENTIFIER && toks[i + 1]?.kind === TokenKind.DOT &&
+        toks[i + 2]?.kind === TokenKind.TYPE_NAME) {
+      alias = t.text;
+      aliasSpan = t.span;
+      name = toks[i + 2]!.text;
+      nameSpan = toks[i + 2]!.span;
+      break;
+    }
+    if (t.kind === TokenKind.TYPE_NAME) {
+      name = t.text;
+      nameSpan = t.span;
+      break;
+    }
+  }
+  return { span: node.span, alias, name, aliasSpan, nameSpan };
+}
+
 function transformTraitDecl(node: CstNode): TraitDeclaration {
   const nameToken = findToken(node, TokenKind.TYPE_NAME);
   const fields = childNodes(node, CstKind.FieldDecl).map(transformFieldDecl);
-  const spreads = childNodes(node, CstKind.SpreadField).map(s =>
-    findToken(s, TokenKind.TYPE_NAME)?.text ?? ''
-  );
+  const spreads = childNodes(node, CstKind.SpreadField).map(extractSpreadRef);
   const alwaysBlock = childNode(node, CstKind.AlwaysBlock);
 
   return {
@@ -389,9 +424,7 @@ function transformModelDecl(node: CstNode): ModelDeclaration {
   const ephemeral = hasToken(node, TokenKind.KW_EPHEMERAL);
   const immutable = hasToken(node, TokenKind.KW_IMMUTABLE);
   const fields = childNodes(node, CstKind.FieldDecl).map(transformFieldDecl);
-  const spreads = childNodes(node, CstKind.SpreadField).map(s =>
-    findToken(s, TokenKind.TYPE_NAME)?.text ?? ''
-  );
+  const spreads = childNodes(node, CstKind.SpreadField).map(extractSpreadRef);
   const ttlNode = childNode(node, CstKind.TtlDecl);
   const retainNode = childNode(node, CstKind.RetainDecl);
   const alwaysBlock = childNode(node, CstKind.AlwaysBlock);
@@ -1278,6 +1311,28 @@ function extractBaseType(node: CstNode, toks: Token[]): BaseTypeRef {
     return { kind: 'inline_struct', fields, span: node.span };
   }
 
+  // Qualified type ref: IDENTIFIER DOT TYPE_NAME
+  if (firstMeaningful.kind === TokenKind.IDENTIFIER) {
+    const allToks = node.children.filter(
+      (c): c is Token => isToken(c) && !TRIVIA_KINDS.has(c.kind)
+    );
+    const aliasIdx = allToks.indexOf(firstMeaningful);
+    if (aliasIdx >= 0 &&
+        allToks[aliasIdx + 1]?.kind === TokenKind.DOT &&
+        allToks[aliasIdx + 2]?.kind === TokenKind.TYPE_NAME) {
+      const alias = allToks[aliasIdx]!;
+      const typeName = allToks[aliasIdx + 2]!;
+      return {
+        kind: 'qualified',
+        alias: alias.text,
+        name: typeName.text,
+        aliasSpan: alias.span,
+        nameSpan: typeName.span,
+        span: node.span,
+      };
+    }
+  }
+
   // Named type (PascalCase)
   if (firstMeaningful.kind === TokenKind.TYPE_NAME) {
     return { kind: 'named', name: firstMeaningful.text, span: node.span };
@@ -1295,9 +1350,75 @@ function extractBaseType(node: CstNode, toks: Token[]): BaseTypeRef {
 
 function transformUseDecl(node: CstNode): UseNode {
   const target = findToken(node, TokenKind.STRING_LITERAL);
+  // Walk non-trivia tokens to find the identifier after `as` and
+  // the exposing list after `exposing`.
+  const toks = tokens(node);
+  let alias: string | undefined;
+  let exposing: ExposedName[] | undefined;
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i]!;
+    if (t.kind === TokenKind.KW_AS) {
+      const next = toks[i + 1];
+      if (next?.kind === TokenKind.IDENTIFIER) {
+        alias = next.text;
+      }
+    } else if (t.kind === TokenKind.KW_EXPOSING) {
+      exposing = [];
+      for (let j = i + 1; j < toks.length; j++) {
+        const tj = toks[j]!;
+        if (tj.kind === TokenKind.TYPE_NAME || tj.kind === TokenKind.IDENTIFIER) {
+          exposing.push({ name: tj.text, span: tj.span });
+        } else if (tj.kind === TokenKind.COMMA) {
+          continue;
+        } else {
+          break;
+        }
+      }
+      break;
+    }
+  }
   return {
     span: node.span,
     compositionKind: 'use',
     target: target ? target.text.slice(1, -1) : '',
+    alias,
+    exposing,
   };
+}
+
+function transformExtendDecl(node: CstNode): ExtendNode {
+  const target = extractExtendTarget(node);
+  const body = extractExtendBody(node);
+  return { span: node.span, compositionKind: 'extend', target, body };
+}
+
+function transformRefineDecl(node: CstNode): RefineNode {
+  const target = extractExtendTarget(node);
+  const body = extractExtendBody(node);
+  return { span: node.span, compositionKind: 'refine', target, body };
+}
+
+function extractExtendTarget(node: CstNode): string {
+  // Walk non-trivia tokens: skip the leading KW_EXTEND/KW_REFINE, then collect
+  // identifier tokens joined with DOT for qualified targets.
+  const toks = tokens(node);
+  const parts: string[] = [];
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i]!;
+    if (t.kind === TokenKind.KW_EXTEND || t.kind === TokenKind.KW_REFINE) continue;
+    if (t.kind === TokenKind.IDENTIFIER) {
+      parts.push(t.text);
+      const next = toks[i + 1];
+      if (next?.kind === TokenKind.DOT) continue;
+      break;
+    }
+    if (t.kind === TokenKind.DOT) continue;
+    break;
+  }
+  return parts.join('.');
+}
+
+function extractExtendBody(node: CstNode): string[] {
+  const prose = childNode(node, CstKind.ProseContent);
+  return prose ? extractProseLines(prose) : [];
 }

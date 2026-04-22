@@ -1,0 +1,20 @@
+project cross_file_demo_shared
+  > Shared building blocks for the cross-file-demo workspace.
+
+trait Auditable {
+  created_at: datetime, generated
+  updated_at: datetime
+}
+
+User = {
+  id: string, unique, generated, cuid
+  email: string, unique
+  ...Auditable
+}
+
+Session = {
+  id: string, unique, generated
+  user_id: -> User
+  token: string, secret
+  ...Auditable
+}

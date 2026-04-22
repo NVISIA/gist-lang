@@ -458,4 +458,4 @@ You ARE expected to:
 
 ---
 
-*GIST Interpreter Instructions v0.7 — for use with the GIST Language Specification v0.7*
+*GIST Interpreter Instructions v0.8 — for use with the GIST Language Specification v0.8*
